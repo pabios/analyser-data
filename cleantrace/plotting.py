@@ -57,6 +57,7 @@ class CurveStyle:
     width: float = 1.2
     style: str = "-"
     marker: str = ""
+    absolute: bool = False  # affichage en valeur absolue |x| (les données ne changent pas)
 
 
 @dataclass
@@ -161,6 +162,27 @@ def _colors(n: int):
 MAX_BUCKETS = 2000
 
 
+def axis_title(series: Sequence[PlotSeries]) -> str:
+    """Titre d'un axe Y d'après les grandeurs tracées (issue #1) : « Tension (V) / Courant (mA) ».
+    Grandeur inconnue : son unité seule ; rien de connu : « Signaux électriques »."""
+    from .channels import QUANTITY_NAMES
+
+    groups: Dict[str, List[str]] = {}
+    for s in series:
+        units = groups.setdefault(s.quantity, [])
+        if s.unit and s.unit not in units:
+            units.append(s.unit)
+    parts = []
+    for quantity, units in groups.items():
+        name = _(QUANTITY_NAMES[quantity]) if quantity in QUANTITY_NAMES else ""
+        unit_text = ", ".join(units)
+        if name:
+            parts.append("{} ({})".format(name, unit_text) if unit_text else name)
+        elif unit_text:
+            parts.append(unit_text)
+    return " / ".join(parts) or _("Signaux électriques")
+
+
 def _auto_layout(fig) -> None:
     """Mise en page recalculée à CHAQUE dessin : marges justes même si la taille ou l'échelle
     d'affichage (Windows à 125 %, 150 %) changent après le dessin, ex. au changement de langue."""
@@ -191,8 +213,9 @@ def decimate_indices(y: np.ndarray, start: int, stop: int, buckets: int = MAX_BU
 class _Trace:
     """Une courbe affichée : données complètes + indices actuellement tracés."""
 
-    def __init__(self, line, x, y, shiftable, index_base=0):
+    def __init__(self, line, x, y, shiftable, index_base=0, absolute=False):
         self.index_base = index_base
+        self.absolute = absolute
         self.line = line
         self.x = np.asarray(x, dtype=float)
         self.y = np.asarray(y, dtype=float)
@@ -246,17 +269,21 @@ class PlotManager:
             if s.raw:
                 (line,) = target.plot([], [], color=C["border_strong"], linewidth=0.9, label=_("_brut"), gid=s.gid,
                                       zorder=1)
-                trace = _Trace(line, s.x, s.y, s.shiftable, s.index_base)
+                own = settings.curves.get(s.key)
+                trace = _Trace(line, s.x, s.y, s.shiftable, s.index_base, absolute=bool(own and own.absolute))
                 self._traces[s.gid] = trace
                 self._refresh(trace, None)
                 continue
             style = settings.curves.get(s.key) or CurveStyle()
             color = style.color or palette[s.gid]
+            label = style.name or s.label
+            if style.absolute and not style.name:
+                label = "|{}|".format(label)
             (line,) = target.plot([], [], color=color, linewidth=style.width, linestyle=style.style,
-                                  marker=style.marker or None, markersize=3, label=style.name or s.label,
+                                  marker=style.marker or None, markersize=3, label=label,
                                   gid=s.gid, zorder=2)
             self.colors[s.gid] = color
-            trace = _Trace(line, s.x, s.y, s.shiftable, s.index_base)
+            trace = _Trace(line, s.x, s.y, s.shiftable, s.index_base, absolute=style.absolute)
             self._traces[s.gid] = trace
             self._refresh(trace, None)
             handles.append(line)
@@ -264,9 +291,8 @@ class PlotManager:
             a.relim()
             a.autoscale_view()
 
-        main_units = sorted({s.unit for s in main if s.quantity not in (TEMPERATURE, HUMIDITY) and s.unit})
         if any(s.quantity not in (TEMPERATURE, HUMIDITY) for s in main):
-            ax.set_ylabel(_("Signaux électriques") + (" ({})".format(", ".join(main_units)) if main_units else ""))
+            ax.set_ylabel(axis_title([s for s in main if s.quantity not in (TEMPERATURE, HUMIDITY)]))
         else:
             ax.set_yticks([])
         from .theme import HUMIDITY_COLOR, TEMPERATURE_COLOR
@@ -383,8 +409,9 @@ class PlotManager:
         else:
             start = max(0, int(np.searchsorted(trace.x, view[0] - offset)) - 1)
             stop = min(n, int(np.searchsorted(trace.x, view[1] - offset)) + 1)
-        trace.index = decimate_indices(trace.y, start, max(start, stop))
-        trace.line.set_data(trace.x[trace.index] + offset, trace.y[trace.index])
+        y = np.abs(trace.y) if trace.absolute else trace.y
+        trace.index = decimate_indices(y, start, max(start, stop))
+        trace.line.set_data(trace.x[trace.index] + offset, y[trace.index])
 
     def _format_coord(self, x, y):
         t = _("{:.2f} %").format(x) if self.percent_axis else format_hms(x)

@@ -323,4 +323,13 @@ EN = {
     'Carré': 'Square',
     'Croix': 'Cross',
     "\n\nValeurs lues (première ligne de mesure n° {}) : {}": "\n\nValues read (first measurement line no. {}): {}",
+    'Tension': 'Voltage',
+    'Courant': 'Current',
+    'Température': 'Temperature',
+    'Humidité': 'Humidity',
+    'Température ambiante': 'Ambient temperature',
+    'Température ambiante {}': 'Ambient temperature {}',
+    'VALEUR ABSOLUE': 'ABSOLUTE VALUE',
+    'Affichage en valeur absolue |x| : {} [{}] (données inchangées)': 'Absolute value |x| display: {} [{}] (data unchanged)',
+    'Affichage en valeur absolue désactivé : {} [{}]': 'Absolute value display turned off: {} [{}]',
 }

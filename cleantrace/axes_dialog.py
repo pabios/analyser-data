@@ -134,7 +134,8 @@ class AxesDialog(tk.Toplevel):
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         if len(self.keys) > 12:
             scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        headers = [_("VOIE"), _("NOM AFFICHÉ"), _("COULEUR"), _("ÉPAISSEUR"), _("TRAIT"), _("MARQUEURS")]
+        headers = [_("VOIE"), _("NOM AFFICHÉ"), _("COULEUR"), _("ÉPAISSEUR"), _("TRAIT"), _("MARQUEURS"),
+                   _("VALEUR ABSOLUE")]
         for col, text in enumerate(headers):
             ttk.Label(table, text=text, style="Muted.Card.TLabel").grid(row=0, column=col, sticky=tk.W, padx=6,
                                                                         pady=(0, 6))
@@ -161,7 +162,10 @@ class AxesDialog(tk.Toplevel):
             marker = tk.StringVar(value=_(MARKERS.get(style.marker, MARKERS[""])))
             ttk.Combobox(table, textvariable=marker, values=[_(v) for v in MARKERS.values()], state="readonly",
                          width=10).grid(row=row, column=5, sticky=tk.W, padx=6)
-            self.curve_vars[key] = (name, color, width, line, marker, shown, color.get())
+            absolute = tk.BooleanVar(value=style.absolute)
+            ttk.Checkbutton(table, text="|x|", variable=absolute, style="Card.TCheckbutton").grid(
+                row=row, column=6, sticky=tk.W, padx=6)
+            self.curve_vars[key] = (name, color, width, line, marker, absolute, shown, color.get())
 
     def _pick_color(self, var, swatch, key) -> None:
         chosen = colorchooser.askcolor(var.get(), parent=self, title=_("Couleur de {}").format(key[1]))[1]
@@ -189,7 +193,7 @@ class AxesDialog(tk.Toplevel):
                     raise ValueError(_("Temps invalide : « {} » (attendu H:MM:SS, ex. 1:30:00).").format(var.get())
                                      if not self.percent else _("Nombre invalide : « {} »").format(var.get()))
         if changed(self.x_label, label0):
-            out.x.label = self.x_label.get()
+            out.x.label = self.x_label.get().strip() or None  # vide : libellé par défaut
         if out.x.min is not None and out.x.max is not None and out.x.min >= out.x.max:
             raise ValueError(_("Axe X : le minimum doit être inférieur au maximum."))
 
@@ -203,14 +207,14 @@ class AxesDialog(tk.Toplevel):
                     except ValueError:
                         raise ValueError(_("Nombre invalide : « {} »").format(var.get()))
             if changed(label, initial[2]):
-                axis.label = label.get()
+                axis.label = label.get().strip() or None  # vide : titre par défaut (issue #3)
             title = _(AXIS_NAMES[name])
             if axis.min is not None and axis.max is not None and axis.min >= axis.max:
                 raise ValueError(_("{} : le minimum doit être inférieur au maximum.").format(title))
             if axis.log and axis.min is not None and axis.min <= 0:
                 raise ValueError(_("{} : en échelle logarithmique, le minimum doit être positif.").format(title))
 
-        for key, (name, color, width, line, marker, shown, color0) in self.curve_vars.items():
+        for key, (name, color, width, line, marker, absolute, shown, color0) in self.curve_vars.items():
             style = copy.deepcopy(out.curves.get(key) or CurveStyle())
             if name.get().strip() != shown:
                 style.name = name.get().strip() or None
@@ -224,6 +228,7 @@ class AxesDialog(tk.Toplevel):
                 raise ValueError(_("Épaisseur invalide pour « {} » : {}").format(key[1], width.get()))
             style.style = next(k for k, v in LINE_STYLES.items() if _(v) == line.get())
             style.marker = next(k for k, v in MARKERS.items() if _(v) == marker.get())
+            style.absolute = absolute.get()
             out.curves[key] = style
         return out
 

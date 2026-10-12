@@ -99,8 +99,27 @@ def split_name_unit(raw: str) -> Tuple[str, str]:
     return " ".join(name.split()), normalize_unit(match.group(1))
 
 
-def quantity_of(unit: str) -> str:
-    return _QUANTITY_BY_UNIT.get(unit, OTHER)
+# Grandeur reconnue dans le nom de la voie quand l'unité n'est pas connue. « U_… » et
+# « I_… » : notations usuelles de la tension et du courant (« U_supply », « I_EOM »).
+_QUANTITY_BY_NAME = [
+    (TEMPERATURE, re.compile(r"temp|celsius|°c", re.IGNORECASE)),
+    (HUMIDITY, _HUM_RE),
+    (VOLTAGE, re.compile(r"volt|tension|^u(_|\b|\d)", re.IGNORECASE)),
+    (CURRENT, re.compile(r"courant|amp[eè]re|current|^i(_|\b|\d)", re.IGNORECASE)),
+]
+
+# Nom affiché de chaque grandeur (axes du graphique) ; traduit à l'affichage
+QUANTITY_NAMES = {VOLTAGE: "Tension", CURRENT: "Courant", TEMPERATURE: "Température", HUMIDITY: "Humidité"}
+
+
+def quantity_of(unit: str, *names: str) -> str:
+    """Grandeur d'après l'unité, sinon d'après le nom de la voie ou du signal."""
+    quantity = _QUANTITY_BY_UNIT.get(unit, OTHER)
+    if quantity == OTHER and not unit:
+        for candidate, pattern in _QUANTITY_BY_NAME:
+            if any(name and pattern.search(name) for name in names):
+                return candidate
+    return quantity
 
 
 def make_channel(
@@ -123,7 +142,7 @@ def make_channel(
         if alias.lower() == raw.strip().lower():
             alias = ""
         label = "Channel {}".format(int(match.group(1)))
-        return Channel(raw_name=raw, label=label, unit=unit, quantity=quantity_of(unit), alias=alias)
+        return Channel(raw_name=raw, label=label, unit=unit, quantity=quantity_of(unit, alias), alias=alias)
     if not unit:
         if _TEMP_RE.search(name):
             unit = "°C"
@@ -138,4 +157,4 @@ def make_channel(
     if alias and alias.lower() not in (raw.strip().lower(), name.lower()):
         name = "{} - {}".format(name, alias)
     label = "{} ({})".format(name, unit) if unit else name
-    return Channel(raw_name=raw, label=label, unit=unit, quantity=quantity_of(unit), alias=alias)
+    return Channel(raw_name=raw, label=label, unit=unit, quantity=quantity_of(unit, name, alias), alias=alias)

@@ -417,6 +417,13 @@ class CleanTraceApp:
         AxesDialog(self, self.selected_keys())
 
     def apply_plot_settings(self, settings: PlotSettings) -> None:
+        # Valeur absolue : affichage seulement, mais noté dans le journal (traçabilité des figures)
+        for key in set(settings.curves) | set(self.plot_settings.curves):
+            old, new = self.plot_settings.curves.get(key), settings.curves.get(key)
+            before, after = bool(old and old.absolute), bool(new and new.absolute)
+            if before != after:
+                self.session.log((_("Affichage en valeur absolue |x| : {} [{}] (données inchangées)") if after else
+                                  _("Affichage en valeur absolue désactivé : {} [{}]")).format(key[1], key[0]))
         self.plot_settings = settings
         # Le zoom en cours est gardé si aucune limite de temps n'a été saisie
         keep = settings.x.min is None and settings.x.max is None

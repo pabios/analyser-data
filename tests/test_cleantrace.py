@@ -731,9 +731,58 @@ def test_report_uses_plot_settings(tmp_path):
     assert fig.axes[0].get_title(loc="left") == "Mon essai"
 
 
-def test_legend_shows_channel_only_with_several_files():
-    """Demande client : légende « Channel 4 », jamais le nom du fichier."""
+def test_legend_shows_channel_and_unit_never_the_file():
+    """Issues #1 et #3 : « Channel 3 (V) », jamais le nom du fichier ; « Température ambiante »."""
     s = Session()
     s.load_files([str(EXAMPLES / "GL980_Mes-_260601-170139.CSV"), str(EXAMPLES / "nanodac_Rd_Z.txt")])
     keys = [(m.name, m.channels[0].label) for m in s.measurements.values()]
-    assert [p.label for p in s.series(keys)] == [k[1] for k in keys]
+    assert [p.label for p in s.series(keys)] == ["Channel 3 (V)", "Température ambiante"]
+
+
+def test_several_temperatures_are_numbered():
+    from cleantrace.channels import make_channel
+    from cleantrace.session import legend_label
+
+    probe = make_channel("CH2", "°C")
+    assert legend_label(probe) == "Température ambiante"
+    assert legend_label(probe, 2) == "Température ambiante 2"
+    assert legend_label(make_channel("CH4", "A")) == "Channel 4 (A)"
+    assert legend_label(make_channel("CH9")) == "Channel 9"
+    assert legend_label(make_channel("Courant (mA)")) == "Courant (mA)"
+
+
+@pytest.mark.parametrize("raw, alias, quantity", [
+    ("CH1", "U_supply", VOLTAGE), ("U_supply", "", VOLTAGE), ("I_EOM_specimen 1", "", CURRENT),
+    ("Tension batterie", "", VOLTAGE), ("Courant", "", CURRENT), ("Ambient temp", "", TEMPERATURE),
+    ("RH sonde", "", HUMIDITY), ("Index", "", "autre"), ("Debit", "", "autre"),
+])
+def test_quantity_detected_from_name(raw, alias, quantity):
+    """Issue #1 : grandeur reconnue d'après le nom quand l'unité est inconnue."""
+    assert make_channel(raw, alias=alias).quantity == quantity
+
+
+def test_y_axis_title_groups_quantities():
+    from cleantrace.plotting import PlotSeries, axis_title
+
+    def s(unit, quantity):
+        return PlotSeries(gid="0", label="", x=np.zeros(1), y=np.zeros(1), unit=unit, quantity=quantity)
+
+    assert axis_title([s("V", VOLTAGE), s("mA", CURRENT), s("A", CURRENT)]) == "Tension (V) / Courant (mA, A)"
+    assert axis_title([s("W", "autre")]) == "W"
+    assert axis_title([s("", "autre")]) == "Signaux électriques"
+
+
+def test_absolute_value_is_display_only():
+    from matplotlib.figure import Figure
+
+    from cleantrace.plotting import CurveStyle, PlotManager, PlotSeries, PlotSettings
+
+    y = np.array([-3.0, -1.0, 2.0, -4.0])
+    series = [PlotSeries(gid="0", label="Channel 4 (A)", x=np.arange(4.0), y=y, unit="A", quantity=CURRENT,
+                         key=("f", "Channel 4"))]
+    plot = PlotManager(Figure())
+    plot.draw(series, settings=PlotSettings(curves={("f", "Channel 4"): CurveStyle(absolute=True)}))
+    line = plot.axes["main"].get_lines()[0]
+    np.testing.assert_array_equal(line.get_ydata(), [3, 1, 2, 4])
+    assert line.get_label() == "|Channel 4 (A)|"
+    np.testing.assert_array_equal(y, [-3, -1, 2, -4])  # données intactes (export CSV)

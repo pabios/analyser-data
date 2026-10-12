@@ -117,7 +117,12 @@ gauche de la disquette) :
   48:00:00) ; pour chaque axe Y (signaux électriques, °C, %HR) : min, max, libellé et
   échelle linéaire ou logarithmique. Champ vide = automatique.
 • Onglet Courbes : nom affiché dans la légende, couleur (cliquer sur la pastille),
-  épaisseur, type de trait et marqueurs de chaque voie.
+  épaisseur, type de trait, marqueurs et « Valeur absolue |x| » de chaque voie. La
+  valeur absolue ne change que l'affichage (graphique, image, rapport) : le CSV exporté
+  garde les vraies valeurs signées ; elle est notée dans le journal.
+Par défaut, la légende affiche « Channel 1 (V) » et la température « Température
+ambiante » (numérotée s'il y en a plusieurs) ; le titre de l'axe Y regroupe les
+grandeurs tracées (« Tension (V) / Courant (mA) »). Un titre effacé revient au défaut.
 Les réglages restent quand vous cochez d'autres voies ou nettoyez, et sont repris dans
 l'image et le rapport PDF. Le bouton « Maison » remet les limites automatiques (titres,
 libellés et couleurs gardés) ; « Tout remettre par défaut » efface tout.""",
@@ -126,8 +131,13 @@ libellés et couleurs gardés) ; « Tout remettre par défaut » efface tout."""
 • Axes tab: chart title; start and end time (H:MM:SS, e.g. 1:30:00 or 48:00:00); for
   each Y axis (electrical signals, °C, %RH): min, max, label and linear or logarithmic
   scale. Empty field = automatic.
-• Curves tab: name shown in the legend, colour (click the swatch), width, line style
-  and markers of each channel.
+• Curves tab: name shown in the legend, colour (click the swatch), width, line style,
+  markers and “Absolute value |x|” of each channel. The absolute value only changes the
+  display (chart, image, report): the exported CSV keeps the real signed values; it is
+  recorded in the log.
+By default, the legend shows “Channel 1 (V)” and the temperature “Ambient temperature”
+(numbered if there are several); the Y axis title groups the plotted quantities
+(“Voltage (V) / Current (mA)”). A cleared title returns to the default.
 Settings are kept when you tick other channels or clean, and are used in the image and
 the PDF report. The “Home” button restores automatic limits (titles, labels and colours
 are kept); “Reset all to default” clears everything."""),

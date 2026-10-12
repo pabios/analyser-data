@@ -18,6 +18,7 @@ from .cleaning import (
 from .editing import interpolate_at
 from .export import Key, merge_selection, write_csv
 from .loader import TIME_COL, LoadError, Measurement, align_time_axes, load_measurement
+from .channels import TEMPERATURE, Channel
 from .plotting import PlotSeries
 from .i18n import _
 
@@ -287,6 +288,7 @@ class Session:
     def series(self, keys: Sequence[Key], with_raw: bool = False) -> List[PlotSeries]:
         """Courbes à tracer. ``with_raw`` : ajoute, sous chaque voie modifiée, ses données brutes."""
         out = []
+        temperatures = [k for k in keys if self.measurements[k[0]].channel(k[1]).quantity == TEMPERATURE]
         for i, (name, label) in enumerate(keys):
             m = self.measurements[name]
             ch = m.channel(label)
@@ -300,7 +302,8 @@ class Session:
             out.append(
                 PlotSeries(
                     gid=str(i),
-                    label=label,  # légende : « Channel 4 » seul, sans le nom du fichier (demande client)
+                    label=legend_label(ch, temperatures.index((name, label)) + 1 if len(temperatures) > 1
+                                       and (name, label) in temperatures else 0),
                     x=x,
                     y=y,
                     unit=ch.unit,
@@ -366,6 +369,18 @@ class Session:
         start = max(float(m.data[TIME_COL].iloc[0]) for m in aligned)
         end = min(float(m.data[TIME_COL].iloc[-1]) for m in aligned)
         return (start, end) if end > start else None
+
+
+def legend_label(ch: Channel, temperature_number: int = 0) -> str:
+    """Nom d'une voie dans la légende (issues #1 et #3) : « Channel 1 (V) », jamais le nom du
+    fichier ; la température est la « Température ambiante » (numérotée s'il y en a plusieurs)."""
+    if ch.quantity == TEMPERATURE:
+        if temperature_number:
+            return _("Température ambiante {}").format(temperature_number)
+        return _("Température ambiante")
+    if ch.unit and ch.label.startswith("Channel "):
+        return "{} ({})".format(ch.label, ch.unit)
+    return ch.label
 
 
 def journal_path(path) -> Path:
