@@ -53,6 +53,15 @@ _OVER_RANGE_RE = re.compile(_OVER_RANGE_PATTERN)
 _INDEX_NAME_RE = re.compile(r"^(no\.?|n°|num(ber|[ée]ro)?|index|#|id|ligne)$", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"^[+-]?\s*(\d+([.,]\d*)?|[.,]\d+)([eE][+-]?\d+)?$")  # « + 24.003 » accepté
 _DECIMAL_COMMA_RE = re.compile(r"^[+-]?\s*\d*,\d+([eE][+-]?\d+)?$")
+# Espaces à l'intérieur d'un nombre : « 0 ,01 » (issue #2, X_axis_D2.CSV), séparateur de
+# milliers « 1 234,5 », espaces insécables (\u00a0, \u202f) d'un Windows / Excel français.
+_INNER_SPACES = "[\\s\u00a0\u202f\u2009]"
+_INNER_SPACES_RE = re.compile(_INNER_SPACES)
+
+
+def _compact(field_: str) -> str:
+    """Cellule sans guillemets ni espaces (y compris insécables) : « "  0 ,01" » -> « 0,01 »."""
+    return _INNER_SPACES_RE.sub("", field_.strip().strip('"').lstrip("'"))
 # Séparateur « , » ET décimale « , » sans guillemets : « …,+24,003,-1,5,… ». Les valeurs
 # Graphtec portent toujours un signe : « +24 » suivi de « 003 » est un seul nombre.
 _SIGNED_INT_RE = re.compile(r"^[+-]\s*\d+$")
@@ -574,14 +583,14 @@ def _detect_decimal(rows: List[List[str]], sep: str, n_cols: int) -> str:
     # Avec « , » comme séparateur, une décimale « , » n'est possible qu'entre guillemets :
     # csv.reader les a retirés, la virgule apparaît alors dans le champ.
     for r in rows:
-        if len(r) == n_cols and any(_DECIMAL_COMMA_RE.match(f.strip().strip('"')) for f in r):
+        if len(r) == n_cols and any(_DECIMAL_COMMA_RE.match(_compact(f)) for f in r):
             return ","
     return "."
 
 
 def _is_value(field_: str) -> bool:
     f = field_.strip().strip('"').lstrip("'")
-    return bool(f) and bool(_NUMBER_RE.match(f) or _DATETIME_LIKE_RE.match(f) or _OVER_RANGE_RE.match(f))
+    return bool(f) and bool(_NUMBER_RE.match(_compact(f)) or _DATETIME_LIKE_RE.match(f) or _OVER_RANGE_RE.match(f))
 
 
 def _value_signature(rows: List[List[str]], n_cols: int) -> set:
@@ -782,7 +791,7 @@ def _to_numeric(series: pd.Series, decimal: str) -> pd.Series:
         fast = pd.to_numeric(series, errors="coerce")  # conversion C, sans traitement de texte
         if fast.notna().sum() >= 0.99 * series.notna().sum():
             return fast.astype(float)
-    s = series.fillna("").astype(str).str.strip().str.replace(" ", "", regex=False)
+    s = series.fillna("").astype(str).str.replace(_INNER_SPACES, "", regex=True)
     if decimal == ",":
         s = s.str.replace(",", ".", regex=False)
     return pd.to_numeric(s, errors="coerce")

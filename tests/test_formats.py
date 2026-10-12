@@ -5,6 +5,7 @@ ou « ; ») de ses CSV. S'y ajoutent les variantes produites quand le fichier pa
 (lignes complétées par des séparateurs, dates jj/mm/aaaa, BOM, guillemets...).
 """
 import itertools
+import re
 from pathlib import Path
 
 import numpy as np
@@ -260,3 +261,29 @@ def test_recording_starting_with_unplugged_sensors(tmp_path, start_value):
     assert len(m.data) == len(data)
     assert [c.label for c in m.channels][:3] == ["Channel 1", "Channel 2", "Channel 3"]
     assert m.data["Channel 1"].iloc[:600].isna().all() and m.data["Channel 1"].iloc[600:].notna().any()
+
+
+@pytest.mark.parametrize("sep, space, quote", [(";", " ", ""), (";", " ", ""), (",", " ", '"'),
+                                               (",", " ", '"'), ("\t", " ", "")])
+def test_numbers_with_spaces_inside(tmp_path, sep, space, quote):
+    """Issue #2 (X_axis_D2.CSV) : valeurs « 0 ,01 » (espace, insécable ou fine insécable avant
+    la virgule) : aucune voie n'était reconnue."""
+    src = (Path(__file__).resolve().parent.parent / "exemples" / "autres_formats" / "GL860_1s.CSV")
+    lines = src.read_text(encoding="cp1252").splitlines()
+    units = next(i for i, line in enumerate(lines) if line.startswith("NO.,Time"))
+    number = re.compile(r"^[+-]?\d+\.\d+$")
+
+    def spaced(cell):
+        if not number.match(cell):
+            return cell
+        whole, frac = cell.lstrip("+").split(".")
+        return "{}{:>4}{},{}{}".format(quote, whole, space, frac, quote)
+
+    out = [sep.join(spaced(c) if i > units else c for c in line.split(",")) for i, line in enumerate(lines)]
+    path = tmp_path / "X_axis_D2.CSV"
+    path.write_text("\r\n".join(out) + "\r\n", encoding="utf-8")
+
+    m = load_measurement(path)
+    reference = load_measurement(src)
+    assert [c.label for c in m.channels] == [c.label for c in reference.channels]
+    np.testing.assert_allclose(m.data["Channel 2"].to_numpy(), reference.data["Channel 2"].to_numpy(), equal_nan=True)
