@@ -322,4 +322,5 @@ EN = {
     'Rond': 'Circle',
     'Carré': 'Square',
     'Croix': 'Cross',
+    "\n\nValeurs lues (première ligne de mesure n° {}) : {}": "\n\nValues read (first measurement line no. {}): {}",
 }

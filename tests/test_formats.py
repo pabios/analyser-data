@@ -5,6 +5,7 @@ ou « ; ») de ses CSV. S'y ajoutent les variantes produites quand le fichier pa
 (lignes complétées par des séparateurs, dates jj/mm/aaaa, BOM, guillemets...).
 """
 import itertools
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -231,3 +232,31 @@ def test_graphtec_channels_named_from_amp_settings(tmp_path, units_row):
     path.write_text("\n".join(lines) + "\n")
     m = load_measurement(path)
     assert [c.label for c in m.channels] == ["Channel 3", "Channel 4"]
+
+
+@pytest.mark.parametrize("start_value", ["+++++++", "BURNOUT", ""])
+def test_recording_starting_with_unplugged_sensors(tmp_path, start_value):
+    """Issue #2 (Z_axis_G.CSV) : un enregistrement qui commence par des centaines de valeurs
+    hors échelle ou vides (capteurs pas encore branchés) était refusé (« aucune voie de mesure
+    numérique ») ou perdait ses premières lignes et le nom de ses voies."""
+    src = (Path(__file__).resolve().parent.parent / "exemples" / "autres_formats" / "GL860_1s.CSV")
+    lines = src.read_text(encoding="cp1252").splitlines()
+    units = next(i for i, line in enumerate(lines) if line.startswith("NO.,Time"))
+    header = lines[units - 1].split(",")
+    header[3:13] = ["U_supply", "I_EOM_specimen 1", "I_EOM_specimen 2", "I_EOM_specimen 5", "I_EMB_specimen 6",
+                    "I_EOM_specimen 5", "I_EMB_specimen 6", "U_x", "I_y", "I_z"]
+    lines[units - 1] = ",".join(header)
+    data = lines[units + 1:]
+    out = lines[:units + 1]
+    for k, line in enumerate(data):
+        cells = line.split(",")
+        if k < 600:  # plus que les 500 premières valeurs examinées auparavant
+            cells[3:13] = [start_value] * 10
+        out.append(",".join(cells))
+    path = tmp_path / "Z_axis_G.CSV"
+    path.write_bytes(("\r\n".join(out) + "\r\n").encode("cp1252"))
+
+    m = load_measurement(path)
+    assert len(m.data) == len(data)
+    assert [c.label for c in m.channels][:3] == ["Channel 1", "Channel 2", "Channel 3"]
+    assert m.data["Channel 1"].iloc[:600].isna().all() and m.data["Channel 1"].iloc[600:].notna().any()

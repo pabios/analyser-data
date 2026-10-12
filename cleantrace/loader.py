@@ -255,13 +255,16 @@ def _load(path: Path, name: str, progress: Callable[[str], None]) -> Measurement
 
     # Voies de mesure : toutes les autres colonnes numériques
     numeric_cols = []
+    rejected = []  # (colonne, exemple de valeur) : pour le message d'erreur
     over_range = 0
     for col in raw.columns:
         if col in used_cols or _INDEX_NAME_RE.match(col.strip()) or not col.strip():
             continue
         column = raw[col]
         if not pd.api.types.is_numeric_dtype(column):
-            if _to_numeric(column.dropna().head(500), decimal).notna().sum() == 0:
+            if _to_numeric(_spread_sample(column), decimal).notna().sum() == 0:
+                filled = column.dropna().astype(str)
+                rejected.append((col, filled.iloc[0] if len(filled) else ""))
                 continue  # colonne de texte (alarmes, messages...) : inutile de tout convertir
             text = column.dropna().astype(str).str.strip()
             over_range += int(text.str.match(_OVER_RANGE_PATTERN).sum())
@@ -294,6 +297,8 @@ def _load(path: Path, name: str, progress: Callable[[str], None]) -> Measurement
         raise LoadError(
             _("Le fichier « {} » ne contient aucune voie de mesure numérique "
             "en plus de la colonne temps.\n\nColonnes lues : {}").format(path.name, ", ".join(headers))
+            + _("\n\nValeurs lues (première ligne de mesure n° {}) : {}").format(
+                first_data + 1, ", ".join("{} = « {} »".format(c, v[:20]) for c, v in rejected[:5]))
         )
 
     df = pd.DataFrame(values)
@@ -608,8 +613,21 @@ def _find_first_data_row(rows, n_cols, signature: Optional[set] = None) -> Optio
         if _is_data_row(rows[i], n_cols, signature) and all(
             _is_data_row(rows[j], n_cols, signature) for j in range(i + 1, min(i + 3, len(rows)))
         ):
+            # Début d'enregistrement avec des voies vides (capteurs pas encore branchés) :
+            # ces lignes ont l'horodatage mais pas toutes les valeurs ; ce sont des mesures.
+            while i > 0 and _is_partial_data_row(rows[i - 1], n_cols, signature):
+                i -= 1
             return i
     return None
+
+
+def _is_partial_data_row(row: List[str], n_cols: int, signature: Optional[set]) -> bool:
+    """Ligne de mesure dont certaines voies sont vides : au moins 2 valeurs, et aucun texte
+    (en-tête, unité, « Start time ») dans les colonnes qui portent des valeurs."""
+    if len(row) != n_cols or not signature:
+        return False
+    cells = [row[j].strip().strip('"') for j in sorted(signature)]
+    return sum(_is_value(c) for c in cells) >= 2 and all(not c or _is_value(c) for c in cells)
 
 
 _UNIT_CELL_RE = re.compile(r"^[%°ºµA-Za-z/.\- ]{0,8}$")
@@ -745,6 +763,16 @@ def _unique(label: str, existing) -> str:
     while "{} #{}".format(label, i) in existing:
         i += 1
     return "{} #{}".format(label, i)
+
+
+def _spread_sample(column: pd.Series, size: int = 2000) -> pd.Series:
+    """Valeurs réparties sur toute la colonne, sans les marques hors échelle : une voie qui
+    commence par des « +++++++ » / « BURNOUT » (capteur pas encore branché) reste une voie."""
+    values = column.dropna()
+    if len(values) > size:
+        values = values.iloc[:: max(1, len(values) // size)]
+    text = values.astype(str).str.strip()
+    return values[~text.str.match(_OVER_RANGE_PATTERN) & (text != "")]
 
 
 def _to_numeric(series: pd.Series, decimal: str) -> pd.Series:
