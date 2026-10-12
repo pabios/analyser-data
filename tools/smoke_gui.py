@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 from PIL import ImageGrab  # noqa: E402
 
-from cleantrace import app as app_module  # noqa: E402
+from analyser_data import app as app_module  # noqa: E402
 
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else ".dev-out")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -71,7 +71,7 @@ def shot(root, name):
 def main():
     root = tk.Tk()
     root.geometry("1500x900+0+0")
-    gui = app_module.CleanTraceApp(root)
+    gui = app_module.AnalyserDataApp(root)
     shot(root, "0_accueil.png")
 
     gui.open_files(EXAMPLES)
@@ -194,8 +194,8 @@ def main():
     assert (small != 0).all(), "les petits courants ne doivent pas être effacés avec les suggestions"
     print("GL860 :", gui.status.get())
     # Bouton « Modifier les axes et les courbes » (barre d'outils)
-    from cleantrace.axes_dialog import AxesDialog
-    from cleantrace.plotting import format_hms
+    from analyser_data.axes_dialog import AxesDialog
+    from analyser_data.plotting import format_hms
     axes_dialog = AxesDialog(gui, gui.selected_keys())
     pump(root)
     shot_window(axes_dialog, "15_axes.png")

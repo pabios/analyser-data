@@ -1,4 +1,4 @@
-# Dépendances de CleanTrace (toutes incluses dans Anaconda).
+# Dépendances d'Analyser DATA (toutes incluses dans Anaconda).
 # Tkinter est fourni avec Python.
 numpy>=1.20
 pandas>=1.3

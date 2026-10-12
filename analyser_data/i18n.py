@@ -2,7 +2,7 @@
 
 Le texte français sert de clé : ``_("Ouvrir des fichiers…")`` renvoie la traduction
 anglaise quand la langue est « en », sinon le texte d'origine. Le choix est mémorisé dans
-``~/.cleantrace.json``. Les traductions sont dans ``i18n_en.py``.
+``~/.analyser_data.json``. Les traductions sont dans ``i18n_en.py``.
 """
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ import json
 from pathlib import Path
 
 LANGUAGES = {"fr": "Français", "en": "English"}
-CONFIG_FILE = Path.home() / ".cleantrace.json"
+CONFIG_FILE = Path.home() / ".analyser_data.json"
+LEGACY_CONFIG_FILE = Path.home() / ".cleantrace.json"  # avant le renommage (v0.11.0)
 _language = "fr"
 
 
@@ -41,10 +42,13 @@ def set_language(language: str, save: bool = True) -> None:
 
 
 def load_language() -> str:
-    """Langue mémorisée (français par défaut)."""
-    try:
-        language = json.loads(CONFIG_FILE.read_text(encoding="utf-8")).get("language", "fr")
-    except (OSError, ValueError):
-        language = "fr"
+    """Langue mémorisée (français par défaut ; reprise de l'ancien fichier CleanTrace)."""
+    language = "fr"
+    for path in (CONFIG_FILE, LEGACY_CONFIG_FILE):
+        try:
+            language = json.loads(path.read_text(encoding="utf-8")).get("language", "fr")
+            break
+        except (OSError, ValueError):
+            continue
     set_language(language if language in LANGUAGES else "fr", save=False)
     return _language

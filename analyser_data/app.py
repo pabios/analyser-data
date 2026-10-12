@@ -1,7 +1,7 @@
-"""Interface graphique Tkinter de CleanTrace (thème : ``theme.py``, inspiré de shadcn/ui).
+"""Interface graphique Tkinter d'Analyser DATA (thème : ``theme.py``, inspiré de shadcn/ui).
 
 Disposition :
-    ┌ en-tête : CleanTrace · version ················ Aide · Réinitialiser · Exporter · Ouvrir ┐
+    ┌ en-tête : Analyser DATA · version ················ Aide · Réinitialiser · Exporter · Ouvrir ┐
     │ panneau latéral (cartes)          │ carte « Graphique » : courbes + barre de zoom         │
     │  - Voies de mesure                │                                                       │
     │  - Nettoyage                      │                                                       │
@@ -24,7 +24,7 @@ import pandas as pd
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
-from . import __version__
+from . import APP_NAME, __version__
 from .cleaning import CleaningOptions
 from .axes_dialog import AxesDialog
 from .dialogs import CleaningDialog
@@ -39,7 +39,7 @@ from .session import EXPORT_STEPS, TIME_MODES, Session
 from .theme import C, CheckImages, ScrollFrame, apply_theme, bordered, card, separator
 from .i18n import _, get_language, load_language, set_language
 
-APP_TITLE = "CleanTrace — MultiPlotter pour bancs d'essai"
+APP_TITLE = "Analyser DATA — MultiPlotter pour bancs d'essai"
 FILE_TYPES = [
     ("Fichiers de mesure", "*.csv *.txt *.dat *.CSV *.TXT *.DAT"),
     ("Tous les fichiers", "*.*"),
@@ -48,7 +48,7 @@ EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "exemples"
 EXAMPLE_FILES = ["GL980_Mes-_260601-170139.CSV", "nanodac_Rd_Z.txt"]
 
 
-class CleanTraceApp:
+class AnalyserDataApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.session = Session()
@@ -132,7 +132,7 @@ class CleanTraceApp:
         logo.create_rectangle(1, 1, 27, 27, fill=C["primary"], outline=C["primary"])
         logo.create_line(6, 18, 11, 18, 14, 9, 17, 20, 20, 13, 23, 13, fill=C["primary_fg"], width=2)
         logo.pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Label(brand, text=_("CleanTrace"), style="Brand.TLabel").pack(side=tk.LEFT)
+        ttk.Label(brand, text=APP_NAME, style="Brand.TLabel").pack(side=tk.LEFT)
         ttk.Label(brand, text=_("v") + __version__, style="Badge.TLabel").pack(side=tk.LEFT, padx=(8, 0))
         ttk.Label(brand, text=_("Mesures de bancs d'essai"), style="Muted.Card.TLabel").pack(side=tk.LEFT, padx=(12, 0))
 
@@ -330,7 +330,7 @@ class CleanTraceApp:
         bar.pack(fill=tk.X, side=tk.BOTTOM)
         separator(self.root).pack(side=tk.BOTTOM, fill=tk.X)
         ttk.Label(bar, textvariable=self.status, style="Muted.TLabel").pack(side=tk.LEFT)
-        ttk.Label(bar, text=_("CleanTrace v") + __version__, style="Muted.TLabel").pack(side=tk.RIGHT)
+        ttk.Label(bar, text="{} v{}".format(APP_NAME, __version__), style="Muted.TLabel").pack(side=tk.RIGHT)
 
     # ==================================================================== actions
 
@@ -480,7 +480,7 @@ class CleanTraceApp:
             return
         path = filedialog.asksaveasfilename(
             parent=self.root, title=_("Exporter les données nettoyées"),
-            defaultextension=".csv", initialfile="cleantrace_export.csv",
+            defaultextension=".csv", initialfile="analyser_data_export.csv",
             filetypes=[(_("CSV (séparateur ;)"), "*.csv")],
         )
         if not path:
@@ -508,7 +508,7 @@ class CleanTraceApp:
             return
         path = filedialog.asksaveasfilename(
             parent=self.root, title=_("Enregistrer l'image du graphique"), defaultextension=".png",
-            initialfile="cleantrace_graphique.png",
+            initialfile="analyser_data_graphique.png",
             filetypes=[(_("Image PNG"), "*.png"), ("Document PDF", "*.pdf"), (_("Image vectorielle SVG"), "*.svg")],
         )
         if not path:
@@ -529,7 +529,7 @@ class CleanTraceApp:
             return
         path = filedialog.asksaveasfilename(
             parent=self.root, title=_("Enregistrer le rapport PDF"), defaultextension=".pdf",
-            initialfile="cleantrace_rapport.pdf", filetypes=[("Document PDF", "*.pdf")],
+            initialfile="analyser_data_rapport.pdf", filetypes=[("Document PDF", "*.pdf")],
         )
         if not path:
             return
@@ -802,7 +802,7 @@ class CleanTraceApp:
         self._report_error("Erreur inattendue", exc, "".join(traceback.format_exception(exc_type, exc, tb)))
 
 
-LOG_FILE = Path.home() / "cleantrace_erreurs.log"
+LOG_FILE = Path.home() / "analyser_data_erreurs.log"
 
 
 def log_error(details: str) -> Path:
@@ -811,8 +811,8 @@ def log_error(details: str) -> Path:
 
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as fh:
-            fh.write("=== {} — CleanTrace v{}\n{}\n".format(
-                datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), __version__, details))
+            fh.write("=== {} — {} v{}\n{}\n".format(
+                datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), APP_NAME, __version__, details))
     except OSError:
         pass
     print(details)
@@ -833,7 +833,7 @@ class JournalWindow(tk.Toplevel):
 
     def __init__(self, master, text: str):
         super().__init__(master)
-        self.title(_("Journal des traitements — CleanTrace"))
+        self.title(_("Journal des traitements — {}").format(APP_NAME))
         self.geometry("900x520")
         self.configure(background=C["background"])
         outer = bordered(self)
@@ -911,5 +911,5 @@ def run() -> None:
     _enable_windows_dpi_awareness()
     load_language()
     root = tk.Tk()
-    CleanTraceApp(root)
+    AnalyserDataApp(root)
     root.mainloop()

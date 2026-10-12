@@ -17,7 +17,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 
-from . import __version__
+from . import APP_NAME, __version__
 from .export import Key
 from .loader import TIME_COL
 from .plotting import PlotManager, format_hms
@@ -56,7 +56,7 @@ def build_report(session, keys: Sequence[Key], view: Optional[Tuple[float, float
             pdf.savefig(page)
         info = pdf.infodict()
         info["Title"] = title
-        info["Creator"] = _("CleanTrace v{}").format(__version__)
+        info["Creator"] = "{} v{}".format(APP_NAME, __version__)
     return path
 
 
@@ -72,7 +72,7 @@ def _new_page() -> Figure:
 def _header(fig: Figure, title: str, subtitle: str) -> None:
     fig.text(0.05, 0.94, title, fontsize=16, fontweight="bold", color=C["fg"])
     fig.text(0.05, 0.91, subtitle, fontsize=9, color=C["muted_fg"])
-    fig.text(0.95, 0.94, _("CleanTrace v{}").format(__version__), fontsize=9, color=C["muted_fg"], ha="right")
+    fig.text(0.95, 0.94, "{} v{}".format(APP_NAME, __version__), fontsize=9, color=C["muted_fg"], ha="right")
     fig.text(0.95, 0.91, _("Édité le {}").format(pd.Timestamp.now().strftime(_("%d/%m/%Y à %H:%M"))),
              fontsize=9, color=C["muted_fg"], ha="right")
     fig.add_artist(_hline(fig, 0.895))
@@ -188,6 +188,9 @@ def _plot_figure(session, keys, view, title, settings=None) -> Figure:
     except AttributeError:  # pragma: no cover - Matplotlib < 3.6
         fig.set_tight_layout(False)
     fig.subplots_adjust(left=0.07, right=0.88 if len(fig.axes) > 1 else 0.96, top=0.92, bottom=0.10)
+    # Mention du logiciel sur chaque image / page de graphique exportée (issue #5)
+    fig.text(0.99, 0.01, "{} v{}".format(APP_NAME, __version__), fontsize=7, color=C["muted_fg"],
+             ha="right", va="bottom")
     return fig
 
 

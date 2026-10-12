@@ -1,4 +1,4 @@
-"""CleanTrace — point d'entrée.
+"""Analyser DATA — point d'entrée.
 
 Dans Spyder : ouvrir ce fichier puis appuyer sur F5 (Exécuter).
 En ligne de commande : python main.py
@@ -29,17 +29,19 @@ def _check_dependencies():
 
 def _forget_previous_run():
     """Spyder garde en mémoire les modules d'un lancement précédent : sans ce nettoyage,
-    un nouveau F5 réutiliserait l'ancienne version de CleanTrace (même après mise à jour)."""
+    un nouveau F5 réutiliserait l'ancienne version (même après mise à jour). « cleantrace » :
+    ancien nom du paquet, encore en mémoire si Spyder n'a pas été redémarré depuis."""
     for name in list(sys.modules):
-        if name == "cleantrace" or name.startswith("cleantrace."):
+        if name.split(".")[0] in ("analyser_data", "cleantrace"):
             del sys.modules[name]
 
 
 if __name__ == "__main__":
     if _check_dependencies():
         _forget_previous_run()
-        import cleantrace
-        from cleantrace.app import run
+        import analyser_data
+        from analyser_data.app import run
 
-        print("CleanTrace {} — {}".format(cleantrace.__version__, os.path.dirname(cleantrace.__file__)))
+        print("{} {} — {}".format(analyser_data.APP_NAME, analyser_data.__version__,
+                                  os.path.dirname(analyser_data.__file__)))
         run()

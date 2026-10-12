@@ -1,4 +1,4 @@
-"""Thème visuel de CleanTrace, inspiré de shadcn/ui : palette zinc, cartes, boutons.
+"""Thème visuel d'Analyser DATA, inspiré de shadcn/ui : palette zinc, cartes, boutons.
 
 Tkinter pur (aucune dépendance en plus) : un style ``ttk`` « clam » entièrement
 reconfiguré, et quelques composants (carte, case à cocher dessinée, zone défilante).
@@ -158,11 +158,11 @@ def apply_theme(root: tk.Tk) -> Fonts:
     # Case à cocher : même dessin que dans le tableau des voies
     images = CheckImages(root)
     # Référence gardée sur la fenêtre : sans elle, Python libère les images et Tk ne les affiche plus
-    root._cleantrace_check_images = (images.get("off", size=16), images.get("on", size=16))
+    root._analyser_data_check_images = (images.get("off", size=16), images.get("on", size=16))
     for style, bg in (("TCheckbutton", C["background"]), ("Card.TCheckbutton", C["card"])):
-        element = "CleanTrace{}.indicator".format(style.split(".")[0] if "." in style else "")
+        element = "AnalyserData{}.indicator".format(style.split(".")[0] if "." in style else "")
         try:
-            off, on = root._cleantrace_check_images
+            off, on = root._analyser_data_check_images
             s.element_create(element, "image", off, ("selected", on), border=0, sticky="")
         except tk.TclError:  # déjà créé (fenêtre rouverte dans la même session)
             pass

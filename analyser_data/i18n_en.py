@@ -2,7 +2,7 @@
 
 EN = {
     # --- application
-    "CleanTrace — MultiPlotter pour bancs d'essai": "CleanTrace — MultiPlotter for test benches",
+    "Analyser DATA — MultiPlotter pour bancs d'essai": "Analyser DATA — MultiPlotter for test benches",
     "Prêt. Ouvrez un ou plusieurs fichiers de mesure.": "Ready. Open one or more measurement files.",
     "Langue : français.": "Language: English.",
     "Mesures de bancs d'essai": "Test bench measurements",
@@ -103,7 +103,7 @@ EN = {
         "Each file runs from 0 to 100 % of its own duration (time is distorted).",
     "Chaque fichier démarre à 0 (heures réelles ignorées).": "Each file starts at 0 (real clock times ignored).",
     "Période commune : {} → {} ({})": "Common period: {} → {} ({})",
-    "Journal des traitements — CleanTrace": "Processing log — CleanTrace",
+    "Journal des traitements — {}": "Processing log — {}",
     "Ce journal est joint à chaque export CSV et au rapport PDF.":
         "This log is attached to every CSV export and to the PDF report.",
     "Fermer": "Close",
@@ -197,7 +197,7 @@ EN = {
     "Décalage enceinte climatique : {:+.1f} min": "Climatic chamber shift: {:+.1f} min",
     "  (référence)": "  (reference)",
     # --- journal
-    "Journal des traitements — CleanTrace v{}": "Processing log — CleanTrace v{}",
+    "Journal des traitements — {} v{}": "Processing log — {} v{}",
     "Base de temps : {}": "Time base: {}",
     "Fichier ouvert : {} — {} · {} · {} points{} · voies : {}": "File opened: {} — {} · {} · {} points{} · channels: {}",
     " · du {} au {}": " · from {} to {}",

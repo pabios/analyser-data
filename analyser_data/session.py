@@ -61,9 +61,9 @@ class Session:
         self.journal.append((pd.Timestamp.now().floor("s"), text))
 
     def journal_text(self) -> str:
-        from . import __version__
+        from . import APP_NAME, __version__
 
-        lines = [_("Journal des traitements — CleanTrace v{}").format(__version__),
+        lines = [_("Journal des traitements — {} v{}").format(APP_NAME, __version__),
                  _("Édité le {}").format(pd.Timestamp.now().strftime("%d/%m/%Y %H:%M")), ""]
         lines += ["{}  {}".format(t.strftime("%d/%m/%Y %H:%M:%S"), text) for t, text in self.journal]
         return "\n".join(lines) + "\n"

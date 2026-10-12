@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from cleantrace import i18n
-from cleantrace.i18n_en import EN
+from analyser_data import i18n
+from analyser_data.i18n_en import EN
 
-SOURCES = sorted((Path(__file__).resolve().parent.parent / "cleantrace").glob("*.py"))
+SOURCES = sorted((Path(__file__).resolve().parent.parent / "analyser_data").glob("*.py"))
 DISPLAY_LISTS = ("TIME_MODES", "EXPORT_STEPS", "PEAK_MODES", "APP_TITLE", "FILE_TYPES", "TOOLTIPS", "LINE_STYLES", "MARKERS", "AXIS_NAMES", "SCALES", "QUANTITY_NAMES")
 
 
@@ -34,7 +34,7 @@ def needs_translation(text):
     if text.startswith("*") or re.match(r"^[\d,.]+ \w+$", text):
         return False  # motifs de fichiers, durées (« 100 ms »)
     return bool(re.search(r"[A-Za-zÀ-ÿ]{2,}", words)) and words.strip() not in {
-        "CleanTrace", "CleanTrace v", "min", "MIN … MAX", "SUGGESTION", "POINTS", "Export", "Image", "Import",
+        "Analyser DATA", "min", "MIN … MAX", "SUGGESTION", "POINTS", "Export", "Image", "Import",
         "points", "_brut", "raw:", "t =   y =", "ms", "s", "j", "1 min"}
 
 
@@ -52,3 +52,28 @@ def test_switch_language(tmp_path, monkeypatch):
     finally:
         i18n.set_language("fr")
     assert i18n._("Ouvrir des fichiers…") == "Ouvrir des fichiers…"
+
+
+def test_language_kept_from_old_cleantrace_config(tmp_path, monkeypatch):
+    """Renommage (issue #5) : la langue choisie dans l'ancienne version est reprise."""
+    monkeypatch.setattr(i18n, "CONFIG_FILE", tmp_path / ".analyser_data.json")
+    monkeypatch.setattr(i18n, "LEGACY_CONFIG_FILE", tmp_path / ".cleantrace.json")
+    (tmp_path / ".cleantrace.json").write_text('{"language": "en"}', encoding="utf-8")
+    try:
+        assert i18n.load_language() == "en"
+        i18n.set_language("fr")
+        assert '"fr"' in (tmp_path / ".analyser_data.json").read_text(encoding="utf-8")
+        assert i18n.load_language() == "fr"  # le nouveau fichier prime
+    finally:
+        i18n.set_language("fr", save=False)
+
+
+def test_old_name_is_gone_from_the_interface():
+    """Issue #5 : « Analyser DATA » partout ; « CleanTrace » seulement dans les notes d'historique."""
+    from analyser_data import APP_NAME
+
+    assert APP_NAME == "Analyser DATA"
+    for path in SOURCES:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "CleanTrace" in line:
+                assert "Anciennement" in line or "ancien" in line.lower(), (path.name, line)

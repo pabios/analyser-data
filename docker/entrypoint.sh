@@ -10,7 +10,7 @@ done
 if [ "$1" = "gui" ]; then
     x11vnc -display :99 -forever -shared -nopw -quiet -rfbport 5900 >/dev/null 2>&1 &
     websockify --web /usr/share/novnc 6080 localhost:5900 >/dev/null 2>&1 &
-    echo "Interface CleanTrace : http://localhost:6080/vnc.html?autoconnect=1&resize=scale"
+    echo "Interface Analyser DATA : http://localhost:6080/vnc.html?autoconnect=1&resize=scale"
     exec python main.py
 fi
 exec "$@"

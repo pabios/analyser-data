@@ -1,4 +1,4 @@
-# Environnement de développement CleanTrace (rien n'est installé sur la machine hôte).
+# Environnement de développement Analyser DATA (rien n'est installé sur la machine hôte).
 # Contient un écran virtuel (Xvfb) pour lancer l'interface Tkinter sans affichage,
 # et un accès noVNC pour la voir dans le navigateur : http://localhost:6080/vnc.html
 FROM python:3.11-slim

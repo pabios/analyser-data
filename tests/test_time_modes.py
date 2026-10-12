@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleantrace.loader import TIME_COL
-from cleantrace.session import Session
+from analyser_data.loader import TIME_COL
+from analyser_data.session import Session
 
 
 def write(path, start, n, step_s, value):
@@ -85,7 +85,7 @@ def test_click_on_cropped_curve_targets_real_point(session):
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
 
-    from cleantrace.plotting import PlotManager
+    from analyser_data.plotting import PlotManager
 
     session.set_time_mode("common")
     fig = Figure()

@@ -4,6 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from . import APP_NAME
 from .i18n import _, get_language
 from .theme import C
 
@@ -193,7 +194,7 @@ Tip: zoom on the useful period before exporting the image or the report."""),
     ("En cas de problème", "En cas de problème", """\
 Les longues opérations (ouverture, nettoyage, exports) affichent leur avancement ; la
 fenêtre reste utilisable. En cas d'erreur, un message l'explique et les détails
-techniques sont enregistrés dans le fichier « cleantrace_erreurs.log » de votre
+techniques sont enregistrés dans le fichier « analyser_data_erreurs.log » de votre
 dossier personnel (C:\\Users\\<vous>) : envoyez-le au développeur avec une capture.
 
 Fichier refusé : le message indique ce qui a été lu. Répondez « Oui » pour enregistrer
@@ -202,7 +203,7 @@ Vérifiez aussi la version dans le titre de la fenêtre.""",
      "Troubleshooting", """\
 Long operations (opening, cleaning, exports) show their progress; the window stays
 usable. If an error occurs, a message explains it and the technical details are saved
-to the “cleantrace_erreurs.log” file in your home folder (C:\\Users\\<you>): send it to
+to the “analyser_data_erreurs.log” file in your home folder (C:\\Users\\<you>): send it to
 the developer with a screenshot.
 
 Rejected file: the message shows what was read. Answer “Yes” to save an excerpt
@@ -226,7 +227,7 @@ class HelpWindow(tk.Toplevel):
     def __init__(self, master):
         super().__init__(master)
         english = get_language() == "en"
-        self.title(_("Aide") + " — CleanTrace")
+        self.title(_("Aide") + " — " + APP_NAME)
         self.geometry("760x660")
         self.configure(background=C["background"])
         outer = tk.Frame(self, background=C["card"], highlightbackground=C["border"], highlightthickness=1)

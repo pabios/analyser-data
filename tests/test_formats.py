@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleantrace.loader import TIME_COL, load_measurement
+from analyser_data.loader import TIME_COL, load_measurement
 
 START = pd.Timestamp("2026-06-01 17:01:39")
 N = 300  # points à 100 ms

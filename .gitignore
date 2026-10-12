@@ -4,5 +4,5 @@ __pycache__/
 .dev-out/
 .spyproject/
 .ipynb_checkpoints/
-cleantrace_export*.csv
+analyser_data_export*.csv
 .DS_Store

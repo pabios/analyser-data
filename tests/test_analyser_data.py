@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cleantrace.channels import CURRENT, HUMIDITY, TEMPERATURE, VOLTAGE, make_channel
-from cleantrace.cleaning import CleaningOptions, clean_signal, remove_saturation_peaks, zero_rest_noise
-from cleantrace.editing import interpolate_at
-from cleantrace.loader import TIME_COL, LoadError, align_time_axes, load_measurement
-from cleantrace.plotting import format_hms
-from cleantrace.session import Session
+from analyser_data.channels import CURRENT, HUMIDITY, TEMPERATURE, VOLTAGE, make_channel
+from analyser_data.cleaning import CleaningOptions, clean_signal, remove_saturation_peaks, zero_rest_noise
+from analyser_data.editing import interpolate_at
+from analyser_data.loader import TIME_COL, LoadError, align_time_axes, load_measurement
+from analyser_data.plotting import format_hms
+from analyser_data.session import Session
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "exemples"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -345,7 +345,7 @@ def test_pure_noise_channel_untouched():
 
 
 def test_noise_threshold_suggestion():
-    from cleantrace.cleaning import suggest_noise_threshold
+    from analyser_data.cleaning import suggest_noise_threshold
 
     rng = np.random.default_rng(5)
     y = np.r_[np.full(500, 5.0), np.zeros(500), np.full(500, -5.0)] + rng.normal(0, 0.015, 1500)
@@ -427,7 +427,7 @@ def test_rest_noise_forced_to_zero():
 
 def test_smoothing_keeps_edges_levels_and_shapes():
     """Lisser sans mettre à 0 : bruit réduit, créneaux verticaux, niveaux et décharge conservés."""
-    from cleantrace.cleaning import smooth_preserving_edges
+    from analyser_data.cleaning import smooth_preserving_edges
 
     rng = np.random.default_rng(8)
     t = np.arange(6000)
@@ -483,7 +483,7 @@ def test_nan_values_are_kept():
 
 
 def test_format_hms():
-    from cleantrace.export import hms_column
+    from analyser_data.export import hms_column
 
     values = [0, 61.5, -0.5, 1234.567]
     assert list(hms_column(np.array(values))) == [format_hms(v) for v in values]
@@ -493,7 +493,7 @@ def test_format_hms():
 
 
 def test_time_axis_ticks_stay_readable():
-    from cleantrace.plotting import TimeLocator, format_axis_time
+    from analyser_data.plotting import TimeLocator, format_axis_time
 
     ticks = TimeLocator().tick_values(0, 140_000)  # ~97 jours (deux essais très éloignés)
     assert 2 <= len(ticks) <= 9
@@ -516,7 +516,7 @@ def test_click_correction_on_figure():
     from matplotlib.backend_bases import MouseEvent
     from matplotlib.figure import Figure
 
-    from cleantrace.editing import ClickCorrector
+    from analyser_data.editing import ClickCorrector
 
     fig = Figure()
     FigureCanvasAgg(fig)
@@ -534,7 +534,7 @@ def test_click_correction_on_figure():
 
 
 def test_decimation_keeps_spikes_and_maps_indices():
-    from cleantrace.plotting import decimate_indices
+    from analyser_data.plotting import decimate_indices
 
     y = np.zeros(1_000_000)
     y[123_457] = 999.0  # pic isolé au milieu d'un million de points
@@ -600,7 +600,7 @@ def test_session_reports_bad_file(tmp_path):
 
 
 def test_write_extract_keeps_head_and_tail(tmp_path):
-    from cleantrace.loader import write_extract
+    from analyser_data.loader import write_extract
 
     out = write_extract(EXAMPLES / GL980, tmp_path / "extrait.txt")
     text = out.read_bytes().decode("cp1252")
@@ -648,7 +648,7 @@ def _rest_square(rest, amp, noise, spikes=0.0, seed=1):
 def test_zero_rest_works_with_offset_rest_and_spikes(rest, spikes):
     """Retour client v0.8.1 : « Forcer à 0 » ne changeait rien (repos à −0,04 A non reconnu)
     ou mettait tout à 0 (seuil faussé par un pic de saturation à 10 A)."""
-    from cleantrace.cleaning import has_rest_phase, suggest_noise_threshold
+    from analyser_data.cleaning import has_rest_phase, suggest_noise_threshold
 
     y = _rest_square(rest, 0.5, 0.005, spikes)
     assert has_rest_phase(y)
@@ -664,7 +664,7 @@ def test_zero_rest_works_with_offset_rest_and_spikes(rest, spikes):
 
 
 def test_zero_rest_off_by_default_and_never_on_permanent_signal():
-    from cleantrace.cleaning import has_rest_phase
+    from analyser_data.cleaning import has_rest_phase
 
     assert not CleaningOptions().zero_rest
     supply = 24 + np.random.default_rng(0).normal(0, 0.02, 5000)
@@ -672,7 +672,7 @@ def test_zero_rest_off_by_default_and_never_on_permanent_signal():
 
 
 def test_parse_hms_for_axis_limits():
-    from cleantrace.plotting import parse_hms
+    from analyser_data.plotting import parse_hms
 
     assert parse_hms("1:30:00") == 90
     assert parse_hms("48:00:00") == 48 * 60
@@ -688,7 +688,7 @@ def test_parse_hms_for_axis_limits():
 def test_plot_settings_are_applied_and_kept(tmp_path):
     from matplotlib.figure import Figure
 
-    from cleantrace.plotting import MAIN_AXIS, AxisSettings, CurveStyle, PlotManager, PlotSeries, PlotSettings
+    from analyser_data.plotting import MAIN_AXIS, AxisSettings, CurveStyle, PlotManager, PlotSeries, PlotSettings
 
     x = np.linspace(0, 600, 6001)
     series = [PlotSeries(gid="0", label="Channel 4", x=x, y=np.sin(x) + 2, unit="A", quantity="courant",
@@ -719,8 +719,8 @@ def test_plot_settings_are_applied_and_kept(tmp_path):
 
 
 def test_report_uses_plot_settings(tmp_path):
-    from cleantrace.plotting import AxisSettings, PlotSettings
-    from cleantrace.report import _plot_figure
+    from analyser_data.plotting import AxisSettings, PlotSettings
+    from analyser_data.report import _plot_figure
 
     s = Session()
     s.load_files([str(EXAMPLES / "GL980_Mes-_260601-170139.CSV")])
@@ -740,8 +740,8 @@ def test_legend_shows_channel_and_unit_never_the_file():
 
 
 def test_several_temperatures_are_numbered():
-    from cleantrace.channels import make_channel
-    from cleantrace.session import legend_label
+    from analyser_data.channels import make_channel
+    from analyser_data.session import legend_label
 
     probe = make_channel("CH2", "°C")
     assert legend_label(probe) == "Température ambiante"
@@ -762,7 +762,7 @@ def test_quantity_detected_from_name(raw, alias, quantity):
 
 
 def test_y_axis_title_groups_quantities():
-    from cleantrace.plotting import PlotSeries, axis_title
+    from analyser_data.plotting import PlotSeries, axis_title
 
     def s(unit, quantity):
         return PlotSeries(gid="0", label="", x=np.zeros(1), y=np.zeros(1), unit=unit, quantity=quantity)
@@ -775,7 +775,7 @@ def test_y_axis_title_groups_quantities():
 def test_absolute_value_is_display_only():
     from matplotlib.figure import Figure
 
-    from cleantrace.plotting import CurveStyle, PlotManager, PlotSeries, PlotSettings
+    from analyser_data.plotting import CurveStyle, PlotManager, PlotSeries, PlotSettings
 
     y = np.array([-3.0, -1.0, 2.0, -4.0])
     series = [PlotSeries(gid="0", label="Channel 4 (A)", x=np.arange(4.0), y=y, unit="A", quantity=CURRENT,
@@ -794,9 +794,9 @@ def test_temperature_color_matches_curve_legend_axis_and_stays_fixed():
     from matplotlib.colors import to_hex
     from matplotlib.figure import Figure
 
-    from cleantrace.plotting import CurveStyle, PlotManager, PlotSettings
-    from cleantrace.report import _plot_figure
-    from cleantrace.theme import TEMPERATURE_COLOR
+    from analyser_data.plotting import CurveStyle, PlotManager, PlotSettings
+    from analyser_data.report import _plot_figure
+    from analyser_data.theme import TEMPERATURE_COLOR
 
     s = Session()
     s.load_files([str(EXAMPLES / "GL980_Mes-_260601-170139.CSV"), str(EXAMPLES / "nanodac_Rd_Z.txt")])

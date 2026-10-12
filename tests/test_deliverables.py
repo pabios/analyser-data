@@ -1,10 +1,14 @@
 """Décalage de zéro, comparaison avec le brut, journal des traitements et livrables client."""
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from cleantrace.cleaning import CleaningOptions, clean_signal, estimate_rest_offset
-from cleantrace.session import Session, journal_path
+from analyser_data.cleaning import CleaningOptions, clean_signal, estimate_rest_offset
+from analyser_data.session import Session, journal_path
+
+EXAMPLES = Path(__file__).resolve().parent.parent / "exemples"
 
 
 def channel_with_offset(offset, n=20000, seed=0):
@@ -76,7 +80,7 @@ def test_raw_comparison_series(session):
 
 
 def test_report_and_image(session, tmp_path):
-    from cleantrace.report import build_report, save_figure_image
+    from analyser_data.report import build_report, save_figure_image
 
     keys = session.all_keys()
     session.apply_cleaning(keys, CleaningOptions())
@@ -86,3 +90,18 @@ def test_report_and_image(session, tmp_path):
     for ext in ("png", "pdf", "svg"):
         image = save_figure_image(session, keys, None, tmp_path / ("graphique." + ext))
         assert image.stat().st_size > 1000
+
+
+def test_exports_mention_the_application_name(tmp_path):
+    """Issue #5 : le rapport PDF et les images mentionnent « Analyser DATA »."""
+    from analyser_data import APP_NAME
+    from analyser_data.report import _plot_figure, build_report
+
+    session = Session()
+    session.load_files([str(EXAMPLES / "GL980_Mes-_260601-170139.CSV")])
+    keys = [(next(iter(session.measurements)), "Channel 4")]
+    fig = _plot_figure(session, keys, None, "Essai")
+    assert any(t.get_text().startswith(APP_NAME + " v") for t in fig.texts)
+    pdf = build_report(session, keys, None, tmp_path / "rapport.pdf")
+    assert APP_NAME.encode() in pdf.read_bytes()  # métadonnées « Creator »
+    assert APP_NAME in session.journal_text().splitlines()[0]

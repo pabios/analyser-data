@@ -9,7 +9,7 @@
 #   ./dev.sh shell      ouvre un terminal dans le conteneur
 #   ./dev.sh clean      supprime l'image de dev
 set -e
-IMAGE=cleantrace-dev
+IMAGE=analyser-data-dev
 cd "$(dirname "$0")"
 RUN="docker run --rm -v $(pwd):/app -w /app"
 
@@ -19,7 +19,7 @@ case "${1:-test}" in
               # deux fois : texte pandas en pur Python, puis avec pyarrow (comme sous Anaconda)
               for storage in python pyarrow; do
                   echo "== pandas texte : $storage"
-                  $RUN -e CLEANTRACE_STRING_STORAGE=$storage "$IMAGE" pytest -q -p no:cacheprovider "$@" || exit 1
+                  $RUN -e ANALYSER_DATA_STRING_STORAGE=$storage "$IMAGE" pytest -q -p no:cacheprovider "$@" || exit 1
               done ;;
     gui)      $RUN -it -p 6080:6080 "$IMAGE" gui ;;
     smoke)    mkdir -p .dev-out; $RUN "$IMAGE" python tools/smoke_gui.py /app/.dev-out ;;
