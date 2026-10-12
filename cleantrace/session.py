@@ -289,6 +289,10 @@ class Session:
         """Courbes à tracer. ``with_raw`` : ajoute, sous chaque voie modifiée, ses données brutes."""
         out = []
         temperatures = [k for k in keys if self.measurements[k[0]].channel(k[1]).quantity == TEMPERATURE]
+        # Rang fixe de chaque voie électrique parmi toutes les voies chargées : sa couleur ne
+        # change pas quand on coche / décoche les autres (issue #4)
+        rank = {(m.name, c.label): i for i, (m, c) in enumerate(
+            (m, c) for m in self.measurements.values() for c in m.channels if not c.is_climatic)}
         for i, (name, label) in enumerate(keys):
             m = self.measurements[name]
             ch = m.channel(label)
@@ -311,6 +315,8 @@ class Session:
                     shiftable=m.is_thermal and not self.percent_axis,
                     index_base=first,
                     key=(name, label),
+                    color_index=rank.get((name, label), -1),
+                    color_total=len(rank),
                 )
             )
             if with_raw and self.modified_points((name, label)):

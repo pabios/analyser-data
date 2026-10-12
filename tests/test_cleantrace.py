@@ -786,3 +786,46 @@ def test_absolute_value_is_display_only():
     np.testing.assert_array_equal(line.get_ydata(), [3, 1, 2, 4])
     assert line.get_label() == "|Channel 4 (A)|"
     np.testing.assert_array_equal(y, [-3, -1, 2, -4])  # données intactes (export CSV)
+
+
+def test_temperature_color_matches_curve_legend_axis_and_stays_fixed():
+    """Issue #4 : couleur de la température identique sur la courbe, la légende et l'axe ;
+    couleurs fixes quand on coche / décoche d'autres voies ; reprises à l'export."""
+    from matplotlib.colors import to_hex
+    from matplotlib.figure import Figure
+
+    from cleantrace.plotting import CurveStyle, PlotManager, PlotSettings
+    from cleantrace.report import _plot_figure
+    from cleantrace.theme import TEMPERATURE_COLOR
+
+    s = Session()
+    s.load_files([str(EXAMPLES / "GL980_Mes-_260601-170139.CSV"), str(EXAMPLES / "nanodac_Rd_Z.txt")])
+    gl, nano = list(s.measurements)
+    temp = (nano, "Channel 2")
+    every = [(gl, c.label) for c in s.measurements[gl].channels] + [temp]
+
+    def colors(keys, settings=None):
+        plot = PlotManager(Figure())
+        plot.draw(s.series(keys), settings=settings)
+        by_label = {line.get_label(): to_hex(line.get_color()) for a in plot.axes.values() for line in a.get_lines()}
+        legend = plot.figure.axes[-1].get_legend()
+        legend_colors = {t.get_text(): to_hex(h.get_color()) for t, h in zip(legend.get_texts(), legend.legend_handles)}
+        return plot, by_label, legend_colors
+
+    plot, curves, legend = colors(every)
+    assert curves["Température ambiante"] == legend["Température ambiante"] == TEMPERATURE_COLOR
+    assert to_hex(plot.axes["température"].yaxis.label.get_color()) == TEMPERATURE_COLOR
+    assert TEMPERATURE_COLOR not in [c for k, c in curves.items() if k != "Température ambiante"]
+
+    _p, fewer, _l = colors([every[3], temp])  # on masque des voies : couleurs inchangées
+    assert fewer["Channel 6 (V)"] == curves["Channel 6 (V)"]
+    assert fewer["Température ambiante"] == TEMPERATURE_COLOR
+
+    custom = PlotSettings(curves={temp: CurveStyle(color="#00ff00", absolute=True)})
+    plot, curves, legend = colors(every, custom)  # couleur choisie : courbe, légende et axe suivent
+    assert curves["|Température ambiante|"] == legend["|Température ambiante|"] == "#00ff00"
+    assert to_hex(plot.axes["température"].yaxis.label.get_color()) == "#00ff00"
+
+    fig = _plot_figure(s, every, None, "Rapport")  # export image / PDF
+    exported = {line.get_label(): to_hex(line.get_color()) for a in fig.axes for line in a.get_lines()}
+    assert exported["Température ambiante"] == TEMPERATURE_COLOR

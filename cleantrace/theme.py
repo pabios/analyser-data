@@ -30,12 +30,16 @@ C = {
 }
 
 # Couleurs des courbes (Tailwind 600) : lisibles sur fond blanc, bien distinctes
+# Voies électriques : pas de rouge (réservé à la température) ni de bleu-vert (humidité)
 SERIES_COLORS = [
-    "#2563eb", "#ea580c", "#059669", "#7c3aed", "#e11d48", "#0891b2", "#ca8a04",
-    "#4f46e5", "#db2777", "#65a30d", "#0d9488", "#9333ea", "#c2410c", "#475569",
+    "#2563eb", "#ea580c", "#059669", "#7c3aed", "#ca8a04", "#db2777",
+    "#4f46e5", "#65a30d", "#9333ea", "#475569", "#a16207", "#1d4ed8",
 ]
-TEMPERATURE_COLOR = "#dc2626"
-HUMIDITY_COLOR = "#2563eb"
+# Couleurs réservées (issue #4) : la courbe, sa légende et son axe ont toujours la même
+TEMPERATURE_COLOR = "#e53935"
+TEMPERATURE_SHADES = ["#e53935", "#b71c1c", "#ff7043", "#ad1457"]  # températures 2, 3…
+HUMIDITY_COLOR = "#00897b"
+HUMIDITY_SHADES = ["#00897b", "#004d40", "#4db6ac"]
 
 
 class Fonts:

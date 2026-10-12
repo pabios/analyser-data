@@ -33,6 +33,8 @@ class PlotSeries:
     index_base: int = 0  # indice, dans les données complètes, du premier point de x / y
     raw: bool = False  # données brutes affichées en gris sous la voie nettoyée (comparaison)
     key: Tuple[str, str] = ("", "")  # (fichier, voie) : sert aux réglages des courbes
+    color_index: int = -1  # rang fixe de la voie parmi toutes les voies chargées (couleur stable)
+    color_total: int = 0
 
 
 MAIN_AXIS = "main"  # axe Y de gauche (signaux électriques) ; les autres : TEMPERATURE, HUMIDITY
@@ -144,16 +146,34 @@ def _cmap(name: str):
         return cm.get_cmap(name)
 
 
-def _colors(n: int):
-    """Couleurs des courbes : palette du thème, puis dégradé au-delà."""
+def _series_color(index: int, total: int) -> str:
+    """Couleur de la voie de rang ``index`` : fixe, elle ne dépend pas des voies cochées (issue #4)."""
     from matplotlib.colors import to_hex
 
     from .theme import SERIES_COLORS
 
-    if n <= len(SERIES_COLORS):
-        return SERIES_COLORS[:n]
-    cmap = _cmap("turbo")
-    return [to_hex(cmap(v)) for v in np.linspace(0.05, 0.95, n)]
+    if total <= len(SERIES_COLORS):
+        return SERIES_COLORS[index % len(SERIES_COLORS)]
+    return to_hex(_cmap("viridis")(0.9 * index / max(1, total - 1)))  # pas de rouge
+
+
+def _default_colors(series: Sequence[PlotSeries]) -> Dict[str, str]:
+    """Température : rouge réservé (nuances si plusieurs) ; humidité : vert d'eau ; autres
+    voies : couleur fixe d'après leur rang parmi toutes les voies chargées."""
+    from .theme import HUMIDITY_SHADES, TEMPERATURE_SHADES
+
+    out, counters = {}, {TEMPERATURE: 0, HUMIDITY: 0}
+    others = [s for s in series if s.quantity not in counters]
+    for s in series:
+        if s.quantity in counters:
+            shades = TEMPERATURE_SHADES if s.quantity == TEMPERATURE else HUMIDITY_SHADES
+            out[s.gid] = shades[counters[s.quantity] % len(shades)]
+            counters[s.quantity] += 1
+        elif s.color_index >= 0:
+            out[s.gid] = _series_color(s.color_index, s.color_total)
+        else:
+            out[s.gid] = _series_color(others.index(s), len(others))
+    return out
 
 
 # Au-delà de ce nombre de points visibles, une courbe est réduite pour l'affichage
@@ -263,7 +283,7 @@ class PlotManager:
 
         handles = []
         main = [s for s in series if not s.raw]
-        palette = dict(zip((s.gid for s in main), _colors(len(main))))
+        palette = _default_colors(main)
         for s in sorted(series, key=lambda s: not s.raw):  # le brut d'abord : dessous
             target = axes.get(s.quantity, ax)
             if s.raw:
@@ -297,12 +317,17 @@ class PlotManager:
             ax.set_yticks([])
         from .theme import HUMIDITY_COLOR, TEMPERATURE_COLOR
 
+        # Axe de la température (de l'humidité) de la couleur de sa première courbe, même
+        # si l'utilisateur l'a changée : courbe, légende et axe toujours assortis (issue #4).
+        first = {q: next((self.colors[s.gid] for s in main if s.quantity == q), None) for q in (TEMPERATURE, HUMIDITY)}
         if TEMPERATURE in axes:
-            axes[TEMPERATURE].set_ylabel(_("Température (°C)"), color=TEMPERATURE_COLOR)
-            axes[TEMPERATURE].tick_params(axis="y", colors=TEMPERATURE_COLOR)
+            color = first[TEMPERATURE] or TEMPERATURE_COLOR
+            axes[TEMPERATURE].set_ylabel(_("Température (°C)"), color=color)
+            axes[TEMPERATURE].tick_params(axis="y", colors=color)
         if HUMIDITY in axes:
-            axes[HUMIDITY].set_ylabel(_("Humidité (%HR)"), color=HUMIDITY_COLOR)
-            axes[HUMIDITY].tick_params(axis="y", colors=HUMIDITY_COLOR)
+            color = first[HUMIDITY] or HUMIDITY_COLOR
+            axes[HUMIDITY].set_ylabel(_("Humidité (%HR)"), color=color)
+            axes[HUMIDITY].tick_params(axis="y", colors=color)
         # Style épuré : fond blanc, bordures fines, grille discrète, textes atténués
         for a in axes.values():
             a.set_facecolor(C["card"])
