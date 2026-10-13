@@ -808,7 +808,7 @@ def test_temperature_color_matches_curve_legend_axis_and_stays_fixed():
         plot = PlotManager(Figure())
         plot.draw(s.series(keys), settings=settings)
         by_label = {line.get_label(): to_hex(line.get_color()) for a in plot.axes.values() for line in a.get_lines()}
-        legend = plot.figure.axes[-1].get_legend()
+        legend = plot.legend
         legend_colors = {t.get_text(): to_hex(h.get_color()) for t, h in zip(legend.get_texts(), legend.legend_handles)}
         return plot, by_label, legend_colors
 
@@ -829,3 +829,34 @@ def test_temperature_color_matches_curve_legend_axis_and_stays_fixed():
     fig = _plot_figure(s, every, None, "Rapport")  # export image / PDF
     exported = {line.get_label(): to_hex(line.get_color()) for a in fig.axes for line in a.get_lines()}
     assert exported["Température ambiante"] == TEMPERATURE_COLOR
+
+
+@pytest.mark.parametrize("position", ["right", "top", "bottom"])
+@pytest.mark.parametrize("count", [3, 40])
+def test_legend_is_outside_the_curves(position, count):
+    """Issue #6 : légende hors de la zone des courbes (aussi avec 40 voies et les axes °C),
+    zone de tracé réduite d'autant, mêmes règles à l'export."""
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+
+    from analyser_data.plotting import PlotManager, PlotSeries, PlotSettings
+
+    x = np.linspace(0, 60, 500)
+    series = [PlotSeries(gid=str(i), label="Channel {} (mA)".format(i), x=x, y=np.sin(x + i), unit="mA",
+                         quantity=CURRENT, key=("f", "Channel {}".format(i))) for i in range(count)]
+    series.append(PlotSeries(gid="t", label="Température ambiante", x=x, y=x, unit="°C", quantity=TEMPERATURE,
+                             key=("f", "T")))
+    fig = Figure(figsize=(9, 5.5))
+    FigureCanvasAgg(fig)
+    plot = PlotManager(fig)
+    plot.draw(series, settings=PlotSettings(legend=position))
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    legend = plot.legend.get_window_extent(renderer)
+    assert len(plot.legend.get_texts()) == count + 1
+    for a in fig.axes:
+        assert not legend.overlaps(a.get_window_extent(renderer)), (position, count)
+    assert 0 <= legend.x0 and legend.x1 <= fig.bbox.width + 1 and 0 <= legend.y0 and legend.y1 <= fig.bbox.height + 1
+
+    plot.draw(series, settings=PlotSettings(legend="hidden"))  # bouton « Légende » : masquée
+    assert plot.legend is None and not fig.legends

@@ -332,4 +332,9 @@ EN = {
     'VALEUR ABSOLUE': 'ABSOLUTE VALUE',
     'Affichage en valeur absolue |x| : {} [{}] (données inchangées)': 'Absolute value |x| display: {} [{}] (data unchanged)',
     'Affichage en valeur absolue désactivé : {} [{}]': 'Absolute value display turned off: {} [{}]',
+    'Légende': 'Legend',
+    'À droite': 'Right',
+    'En haut': 'Top',
+    'En bas': 'Bottom',
+    'Masquée': 'Hidden',
 }

@@ -53,7 +53,9 @@ python main.py
 5. Curseur **Décalage enceinte climatique** : recale les courbes du nanodac si l'enceinte est en retard.
 6. Icône **Modifier les axes et les courbes** (barre d'outils du graphique) : titre, début / fin
    du temps en H:MM:SS, min / max / titre / échelle log de chaque axe Y, nom, couleur, épaisseur,
-   trait et **valeur absolue |x|** de chaque voie. Gardé jusqu'au bouton « Maison ».
+   trait et **valeur absolue |x|** de chaque voie, position de la **légende** (toujours hors
+   des courbes : droite, haut, bas ; bouton « Légende » pour la masquer). Gardé jusqu'au
+   bouton « Maison ».
 
    ![Axes et courbes](docs/captures/5-axes-et-courbes.png)
 7. **Exporter ▾** :

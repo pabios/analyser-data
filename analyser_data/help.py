@@ -125,7 +125,10 @@ Par défaut, la légende affiche « Channel 1 (V) » et la température « Temp�
 ambiante » (numérotée s'il y en a plusieurs) ; le titre de l'axe Y regroupe les
 grandeurs tracées (« Tension (V) / Courant (mA) »). Un titre effacé revient au défaut.
 Les réglages restent quand vous cochez d'autres voies ou nettoyez, et sont repris dans
-l'image et le rapport PDF. Le bouton « Maison » remet les limites automatiques (titres,
+l'image et le rapport PDF. La légende est toujours hors des courbes : à droite par
+défaut (plusieurs colonnes s'il y a beaucoup de voies), en haut ou en bas (liste
+« Légende » de l'onglet Axes) ; le bouton « Légende » de la barre d'outils la masque
+ou la réaffiche. Le bouton « Maison » remet les limites automatiques (titres,
 libellés et couleurs gardés) ; « Tout remettre par défaut » efface tout.""",
      "Axes and curves", """\
 “Edit axes and curves” button of the toolbar (curve icon, left of the floppy disk):
@@ -140,7 +143,9 @@ By default, the legend shows “Channel 1 (V)” and the temperature “Ambient 
 (numbered if there are several); the Y axis title groups the plotted quantities
 (“Voltage (V) / Current (mA)”). A cleared title returns to the default.
 Settings are kept when you tick other channels or clean, and are used in the image and
-the PDF report. The “Home” button restores automatic limits (titles, labels and colours
+the PDF report. The legend is always outside the curves: on the right by default (several
+columns when there are many channels), at the top or bottom (“Legend” list of the Axes
+tab); the “Legend” toolbar button hides or shows it. The “Home” button restores automatic limits (titles, labels and colours
 are kept); “Reset all to default” clears everything."""),
 
     ("Base de temps", "Base de temps", """\

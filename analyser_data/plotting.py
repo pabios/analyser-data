@@ -18,7 +18,9 @@ from matplotlib.ticker import FuncFormatter, Locator, MaxNLocator
 from .channels import HUMIDITY, TEMPERATURE
 from .i18n import _
 
-LEGEND_MAX_ROWS = 20
+# Position de la légende, toujours HORS de la zone des courbes (issue #6)
+LEGEND_POSITIONS = {"right": "À droite", "top": "En haut", "bottom": "En bas", "hidden": "Masquée"}
+_LEGEND_LOC = {"right": "outside right upper", "top": "outside upper center", "bottom": "outside lower center"}
 
 
 @dataclass
@@ -70,6 +72,7 @@ class PlotSettings:
     x: AxisSettings = field(default_factory=AxisSettings)
     y: Dict[str, AxisSettings] = field(default_factory=dict)
     curves: Dict[Tuple[str, str], CurveStyle] = field(default_factory=dict)
+    legend: str = "right"  # LEGEND_POSITIONS
 
     def y_axis(self, name: str) -> AxisSettings:
         return self.y.setdefault(name, AxisSettings())
@@ -206,8 +209,9 @@ def axis_title(series: Sequence[PlotSeries]) -> str:
 def _auto_layout(fig) -> None:
     """Mise en page recalculée à CHAQUE dessin : marges justes même si la taille ou l'échelle
     d'affichage (Windows à 125 %, 150 %) changent après le dessin, ex. au changement de langue."""
+    # « constrained » : réserve aussi la place de la légende placée hors des courbes
     try:
-        fig.set_layout_engine("tight")
+        fig.set_layout_engine("constrained", w_pad=0.06, h_pad=0.06)
     except AttributeError:  # pragma: no cover - Matplotlib < 3.6
         fig.set_tight_layout(True)
 
@@ -250,6 +254,7 @@ class PlotManager:
         self.figure = figure
         self.time_offset_min = 0.0
         self.percent_axis = False  # axe du temps en % de la durée (mode « étiré »)
+        self.legend_pad = 0.5  # écart légende / bord de la figure (en taille de police)
         self._traces: Dict[str, _Trace] = {}
         self._main_ax = None
         self.colors: Dict[str, str] = {}  # gid -> couleur de la courbe
@@ -262,6 +267,7 @@ class PlotManager:
         self._traces = {}
         self.colors = {}
         self.axes = {}
+        self.legend = None
         ax = fig.add_subplot(111)
         self._main_ax = ax
         settings = settings or PlotSettings()
@@ -361,7 +367,7 @@ class PlotManager:
         self.axes = axes
         self._apply_axis_settings(settings)
 
-        self._place_legend(ax, list(axes.values())[-1], handles, n_twins=len(axes) - 1)
+        self._place_legend(ax, handles, settings.legend)
         if settings.x.min is not None or settings.x.max is not None:
             self._on_xlim_changed(ax)  # points de la période choisie
         # Zoom / déplacement : on recalcule les points visibles
@@ -442,21 +448,29 @@ class PlotManager:
         t = _("{:.2f} %").format(x) if self.percent_axis else format_hms(x)
         return _("t = {}   y = {:.6g}").format(t, y)
 
-    @staticmethod
-    def _place_legend(ax, top_ax, handles, n_twins: int) -> None:
+    def _place_legend(self, ax, handles, position: str) -> None:
+        """Légende hors de la zone des courbes (issue #6) : à droite (plusieurs colonnes s'il y a
+        beaucoup de voies), en haut ou en bas ; la mise en page réduit le tracé d'autant."""
+        self.legend = None
+        if not handles or position == "hidden":
+            return
+        fig = self.figure
         labels = [h.get_label() for h in handles]
-        if len(handles) <= LEGEND_MAX_ROWS:
-            # Légende sur l'axe du dessus pour qu'elle ne soit pas masquée par les courbes.
-            # "best" teste chaque point : trop lent quand il y a beaucoup de courbes.
-            loc = "best" if len(handles) <= 4 else "upper right"
-            leg = top_ax.legend(handles, labels, loc=loc, fontsize="small", framealpha=0.95)
+        size = "small" if len(handles) <= 12 else "x-small"
+        points = 8.3 if size == "small" else 6.9
+        if position in ("top", "bottom"):
+            longest = max(len(label) for label in labels)
+            ncol = max(1, min(len(handles), int(fig.get_figwidth() * 72 / (points * 0.62 * longest + 34))))
         else:
-            ncol = math.ceil(len(handles) / LEGEND_MAX_ROWS)
-            anchor_x = 1.02 + 0.09 * n_twins + (0.06 if n_twins else 0)
-            leg = top_ax.legend(
-                handles, labels, loc="upper left", bbox_to_anchor=(anchor_x, 1.0),
-                ncol=ncol, fontsize="x-small", framealpha=0.85, borderaxespad=0.0,
-            )
+            position = "right"
+            rows = max(5, int((fig.get_figheight() * 72 - 24) / (points * 1.75)))
+            ncol = math.ceil(len(handles) / rows)
+        try:
+            leg = fig.legend(handles, labels, loc=_LEGEND_LOC[position], ncol=ncol, fontsize=size,
+                             framealpha=0.95, borderaxespad=self.legend_pad)
+        except ValueError:  # pragma: no cover - Matplotlib < 3.7 : pas de position « outside »
+            leg = ax.legend(handles, labels, loc="upper left", bbox_to_anchor=(1.12, 1.0), ncol=ncol,
+                            fontsize=size, borderaxespad=0.0)
         from .theme import C
 
         frame = leg.get_frame()
@@ -465,4 +479,4 @@ class PlotManager:
         frame.set_boxstyle("round,pad=0.4,rounding_size=0.6")
         for text in leg.get_texts():
             text.set_color(C["fg_soft"])
-        leg.set_draggable(True)
+        self.legend = leg

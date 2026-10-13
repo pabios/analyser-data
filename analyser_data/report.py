@@ -178,16 +178,17 @@ def _summary_page(session, keys, view, title) -> Figure:
 def _plot_figure(session, keys, view, title, settings=None) -> Figure:
     fig = _new_page()
     plot = PlotManager(fig)
+    plot.legend_pad = 2.0  # légende écartée du bord de la page A4
     plot.time_offset_min = session.time_offset_min
     plot.percent_axis = session.percent_axis
     plot.draw(session.series(keys), title=title, settings=settings)
     if view is not None and fig.axes:
         fig.axes[0].set_xlim(*view)
-    try:
-        fig.set_layout_engine("none")  # page A4 : marges fixes
-    except AttributeError:  # pragma: no cover - Matplotlib < 3.6
-        fig.set_tight_layout(False)
-    fig.subplots_adjust(left=0.07, right=0.88 if len(fig.axes) > 1 else 0.96, top=0.92, bottom=0.10)
+    # Mise en page automatique (comme à l'écran) : la légende reste hors des courbes (issue #6),
+    # avec des marges de page A4 (en pouces)
+    engine = fig.get_layout_engine()
+    if hasattr(engine, "set") and "rect" in engine.get():
+        engine.set(rect=(0.02, 0.03, 0.96, 0.95))
     # Mention du logiciel sur chaque image / page de graphique exportée (issue #5)
     fig.text(0.99, 0.01, "{} v{}".format(APP_NAME, __version__), fontsize=7, color=C["muted_fg"],
              ha="right", va="bottom")

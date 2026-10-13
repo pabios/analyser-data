@@ -16,7 +16,7 @@ from .channels import HUMIDITY, TEMPERATURE
 from .export import Key
 from .help import HelpWindow
 from .i18n import _, get_language
-from .plotting import LINE_STYLES, MAIN_AXIS, MARKERS, AxisSettings, CurveStyle, PlotSettings, format_hms, parse_hms
+from .plotting import LEGEND_POSITIONS, LINE_STYLES, MAIN_AXIS, MARKERS, AxisSettings, CurveStyle, PlotSettings, format_hms, parse_hms
 from .theme import C, card
 
 AXIS_NAMES = {
@@ -92,6 +92,10 @@ class AxesDialog(tk.Toplevel):
         grid = ttk.Frame(box, style="Card.TFrame")
         grid.pack(fill=tk.BOTH, expand=True)
         self.title_var = self._field(grid, 0, _("Titre du graphique"), self.settings.title, width=46, span=3)
+        ttk.Label(grid, text=_("Légende"), style="Card.TLabel").grid(row=0, column=4, sticky=tk.W, padx=(16, 8))
+        self.legend_var = tk.StringVar(value=_(LEGEND_POSITIONS.get(self.settings.legend, LEGEND_POSITIONS["right"])))
+        ttk.Combobox(grid, textvariable=self.legend_var, values=[_(v) for v in LEGEND_POSITIONS.values()],
+                     state="readonly", width=12).grid(row=0, column=5, sticky=tk.W)
 
         ax = plot.axes[MAIN_AXIS]
         lo, hi = ax.get_xlim()
@@ -179,6 +183,7 @@ class AxesDialog(tk.Toplevel):
         """Réglages saisis. ValueError (message lisible) si un champ est invalide."""
         out = copy.deepcopy(self.settings)
         out.title = self.title_var.get().strip()
+        out.legend = next(k for k, v in LEGEND_POSITIONS.items() if _(v) == self.legend_var.get())
 
         def changed(var, initial):
             return var.get().strip() != initial

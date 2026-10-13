@@ -278,7 +278,8 @@ class AnalyserDataApp:
         holder = ttk.Frame(frame, style="Card.TFrame")
         holder.pack_propagate(False)
         self.canvas = FigureCanvasTkAgg(self.figure, master=holder)
-        toolbar = _Toolbar(self.canvas, frame, on_home=self._on_home, on_edit=self.edit_axes)
+        toolbar = _Toolbar(self.canvas, frame, on_home=self._on_home, on_edit=self.edit_axes,
+                           on_legend=self.toggle_legend)
         toolbar.update()
         _flatten_toolbar(toolbar)
         toolbar.pack(side=tk.BOTTOM, fill=tk.X)
@@ -429,6 +430,16 @@ class AnalyserDataApp:
         keep = settings.x.min is None and settings.x.max is None
         self._redraw_with_view(self.plot.current_view() if keep else None)
         self._set_status(_("Axes et courbes mis à jour (gardés jusqu'au bouton « Maison »)."))
+
+    def toggle_legend(self) -> None:
+        """Bouton « Légende » : masque la légende, ou la réaffiche à sa dernière position."""
+        settings = self.plot_settings
+        if settings.legend == "hidden":
+            settings.legend = getattr(self, "_legend_position", "right")
+        else:
+            self._legend_position = settings.legend
+            settings.legend = "hidden"
+        self._redraw_with_view(self.plot.current_view())
 
     def _on_home(self) -> None:
         """Bouton « Maison » : limites automatiques (titres, libellés et styles gardés)."""
@@ -857,7 +868,7 @@ def _thousands(n: int) -> str:
 class _Toolbar(NavigationToolbar2Tk):
     """Barre Matplotlib + bouton « Modifier les axes et les courbes » (comme la version Qt)."""
 
-    def __init__(self, canvas, master, on_home, on_edit):
+    def __init__(self, canvas, master, on_home, on_edit, on_legend):
         self._on_home, self._on_edit = on_home, on_edit
         # « Marges » retiré : la mise en page est automatique. Bouton d'édition avant « Enregistrer ».
         items = [item for item in NavigationToolbar2Tk.toolitems if item[0] != "Subplots"]
@@ -865,6 +876,9 @@ class _Toolbar(NavigationToolbar2Tk):
                                       "qt4_editor_options", "edit_parameters"))
         self.toolitems = [(t, _(TOOLTIPS[t]) if t in TOOLTIPS else tip, img, cb) for t, tip, img, cb in items]
         super().__init__(canvas, master, pack_toolbar=False)
+        # Bouton rapide : afficher / masquer la légende (issue #6)
+        self.legend_button = self._Button(_("Légende"), None, toggle=False, command=on_legend)
+        self.legend_button.configure(padx=8)
 
     def home(self, *args):
         self._on_home()

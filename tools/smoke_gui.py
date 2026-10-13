@@ -226,6 +226,13 @@ def main():
     assert any(l.get_label() == "Alimentation" for l in gui.figure.axes[0].get_lines())
     gui.plot_settings = app_module.PlotSettings()
     gui.redraw()
+    assert gui.plot.legend is not None  # légende hors des courbes, à droite (issue #6)
+    gui.canvas.toolbar.legend_button.invoke()
+    pump(root)
+    assert gui.plot.legend is None and gui.plot_settings.legend == "hidden"
+    gui.canvas.toolbar.legend_button.invoke()
+    pump(root)
+    assert gui.plot.legend is not None and gui.plot_settings.legend == "right"
     print("axes et courbes : OK")
 
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
