@@ -287,3 +287,41 @@ def test_numbers_with_spaces_inside(tmp_path, sep, space, quote):
     reference = load_measurement(src)
     assert [c.label for c in m.channels] == [c.label for c in reference.channels]
     np.testing.assert_allclose(m.data["Channel 2"].to_numpy(), reference.data["Channel 2"].to_numpy(), equal_nan=True)
+
+
+def _short_gl860(n_rows, trailer=False):
+    """GL860 réglé sur 30 voies (30 lignes AMP settings) dont 17 enregistrées (sh_3 / sh_4.CSV)."""
+    chs = [1, 6, 8, 10, 12, 14, 16, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+    units = ["V"] + ["mA"] * 6 + ["V"] * 10
+    lines = ["Vendor,GRAPHTEC Corporation", "Model,GL860", "Firmware,Ver1.07", 'Software,"Ver1.11"',
+             "MaxChannel,30CH", "Sampling,1s", "Total data points,{}".format(n_rows), "Trigger,0",
+             "Start time,10/07/2026,09:44:13", "Trigger time,10/07/2026,09:44:13", "Amp setting",
+             "CH,Signal name,AMP,Input,Range,Temp Range,Filter,Span,,Unit"]
+    for c in range(1, 31):
+        if c in chs:
+            unit = units[chs.index(c)]
+            lines.append("CH{0},CH{0},SL3,DC,50V,,Off,100.000000,-100.000000,{1}".format(c, unit))
+        else:
+            lines.append("CH{0},CH{0},SL3,Off,,,Off,,,".format(c))
+    lines += ["Data", "No.,Date&Time,ms," + ",".join("CH{}".format(c) for c in chs) + ",Alarm1,Alarm2",
+              "NO.,Time,ms," + ",".join(units) + ",A1234567890,A1234567890"]
+    for k in range(n_rows):
+        values = ",".join("{:+.2f}".format((k + 1) * (j + 1) / 7.0) for j in range(len(chs)))
+        lines.append("{},2026-07-10 09:44:{:02d},000,{},LLLLLLLLLL,LLLLLLLLLL".format(k + 1, 13 + k, values))
+    if trailer:
+        lines += ["", "End of data", "Comment,essai court"]
+    return lines
+
+
+@pytest.mark.parametrize("n_rows", [3, 5, 20, 45])
+@pytest.mark.parametrize("trailer", [False, True])
+def test_short_recording_with_long_preamble(tmp_path, n_rows, trailer):
+    """Issues #8 et #9 (sh_4.CSV, sh_3.CSV) : enregistrement court dont le préambule est plus long
+    que les mesures : séparateur non détecté, ou colonne du préambule prise pour le temps."""
+    path = tmp_path / "sh_4.CSV"
+    path.write_text("\r\n".join(_short_gl860(n_rows, trailer)) + "\r\n", encoding="cp1252")
+    m = load_measurement(path)
+    assert len(m.data) == n_rows and len(m.channels) == 17
+    assert [c.label for c in m.channels][:3] == ["Channel 1", "Channel 6", "Channel 8"]
+    assert m.channels[1].unit == "mA"
+    np.testing.assert_allclose(m.data[TIME_COL].diff().dropna(), 1 / 60.0)

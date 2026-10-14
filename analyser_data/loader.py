@@ -230,13 +230,19 @@ def _load(path: Path, name: str, progress: Callable[[str], None]) -> Measurement
     unwrap = _lines_fully_quoted(sample)
     if unwrap:
         head, tail, sample = (_unwrap_quotes(x) for x in (head, tail, sample))
-    sep = _detect_separator(sample, path.name, head)
+    # Les dernières lignes du fichier sont toujours des mesures : sur un enregistrement court,
+    # le préambule (30 lignes « AMP settings » d'un GL860) peut être plus long que les données
+    # et fausser la détection (issues #8, #9).
+    sep, last = _trailing_data_block([line for line in tail if line.strip()][-300:])
+    if sep is None:
+        sep = _detect_separator(sample, path.name, head)
+        last = sample[-50:]
     merge_commas = sep == "," and _needs_comma_merge(list(csv.reader(sample, delimiter=sep)))
     if merge_commas:
-        head, tail, sample = (_merge_decimal_commas(x) for x in (head, tail, sample))
+        head, tail, sample, last = (_merge_decimal_commas(x) for x in (head, tail, sample, last))
     head_rows = list(csv.reader(head, delimiter=sep))
     sample_rows = list(csv.reader(sample, delimiter=sep))
-    n_cols = _modal_field_count(sample_rows)
+    n_cols = _modal_field_count(list(csv.reader(last, delimiter=sep)))
     decimal = "," if merge_commas else _detect_decimal(sample_rows, sep, n_cols)
     # Colonnes qui contiennent des valeurs dans les vraies lignes de mesure (fin du fichier)
     signature = _value_signature(sample_rows[-50:], n_cols)
@@ -257,6 +263,10 @@ def _load(path: Path, name: str, progress: Callable[[str], None]) -> Measurement
 
     progress(_("Lecture des mesures de {} ({:.0f} Mo)…").format(path.name, size_mb))
     raw = _read_table(path, encoding, sep, decimal, first_data, headers, unwrap, merge_commas)
+
+    # Lignes de fin presque vides (« End of data », « Comment,… ») : ce ne sont pas des mesures
+    if raw.shape[1] > 3:
+        raw = raw[raw.notna().sum(axis=1) >= 3].reset_index(drop=True)
 
     progress(_("Conversion du temps de {}…").format(path.name))
     time_s, start, used_cols = _extract_time(raw, decimal, path.name)
@@ -558,6 +568,27 @@ def write_extract(path, out_path, head_lines: int = 80, tail_lines: int = 10) ->
         if size > HEAD_BYTES or len(head) >= head_lines:
             out.write(b"\n[...]\n" + b"\n".join(tail))
     return out_path
+
+
+def _trailing_data_block(lines: List[str]) -> Tuple[Optional[str], List[str]]:
+    """Séparateur et dernières lignes de mesure : le bloc ininterrompu de lignes, en fin de
+    fichier, qui ont toutes le même nombre de champs (au moins 3) que la dernière ligne.
+    Indépendant de la longueur du préambule, même pour un enregistrement de 5 lignes."""
+    best, best_block = None, []
+    for sep in SEPARATORS:
+        rows = list(csv.reader(lines, delimiter=sep))
+        while rows and sum(_is_value(f) for f in rows[-1]) < 2:
+            rows.pop()  # lignes de fin sans mesures (bilan, commentaire) : ignorées ici
+        if not rows or len(rows[-1]) < 3:
+            continue
+        width, run = len(rows[-1]), 0
+        for row in reversed(rows):
+            if len(row) != width:
+                break
+            run += 1
+        if run > len(best_block):
+            best, best_block = sep, lines[len(rows) - run:len(rows)]
+    return (best, best_block) if len(best_block) >= 2 else (None, [])
 
 
 def _detect_separator(sample: List[str], filename: str, head: List[str]) -> str:
