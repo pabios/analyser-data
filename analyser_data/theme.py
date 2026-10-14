@@ -30,10 +30,28 @@ C = {
 }
 
 # Couleurs des courbes (Tailwind 600) : lisibles sur fond blanc, bien distinctes
-# Voies électriques : pas de rouge (réservé à la température) ni de bleu-vert (humidité)
+# Voies électriques (issue #7) : 17 couleurs nettement différentes les unes des autres et
+# lisibles sur fond blanc, sans rouge (réservé à la température) ni vert d'eau (humidité).
+# Ordre choisi pour que des voies voisines aient des teintes éloignées. Au-delà, les couleurs
+# reviennent avec un trait en tirets, puis en pointillés : deux voies ne se ressemblent jamais.
 SERIES_COLORS = [
-    "#2563eb", "#ea580c", "#059669", "#7c3aed", "#ca8a04", "#db2777",
-    "#4f46e5", "#65a30d", "#9333ea", "#475569", "#a16207", "#1d4ed8",
+    "#1f5fd6",  # bleu
+    "#f28c0f",  # orange
+    "#2e9e44",  # vert
+    "#7b3fc4",  # violet
+    "#00a3c4",  # cyan
+    "#e255a1",  # rose
+    "#4e5d6c",  # gris ardoise
+    "#7cb518",  # vert anis
+    "#0b2e7a",  # bleu marine
+    "#8d5a2b",  # brun
+    "#c71585",  # magenta
+    "#5b8def",  # bleu ciel
+    "#c99a00",  # moutarde
+    "#5e2b97",  # pourpre
+    "#008b8b",  # cyan foncé
+    "#8a96a3",  # gris moyen
+    "#556b2f",  # olive
 ]
 # Couleurs réservées (issue #4) : la courbe, sa légende et son axe ont toujours la même
 TEMPERATURE_COLOR = "#e53935"

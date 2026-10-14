@@ -860,3 +860,35 @@ def test_legend_is_outside_the_curves(position, count):
 
     plot.draw(series, settings=PlotSettings(legend="hidden"))  # bouton « Légende » : masquée
     assert plot.legend is None and not fig.legends
+
+
+def test_every_curve_gets_a_distinct_look_and_red_is_reserved():
+    """Issue #7 : couleurs différentes pour toutes les voies (stables), rouge réservé à la
+    température, contraste suffisant sur fond blanc ; au-delà de la palette : tirets."""
+    from matplotlib.colors import to_hex, to_rgb
+    from matplotlib.figure import Figure
+
+    from analyser_data.plotting import PlotManager, PlotSeries
+    from analyser_data.theme import HUMIDITY_COLOR, SERIES_COLORS, TEMPERATURE_COLOR, TEMPERATURE_SHADES
+
+    def luminance(color):
+        channel = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in to_rgb(color)]
+        return 0.2126 * channel[0] + 0.7152 * channel[1] + 0.0722 * channel[2]
+
+    for color in SERIES_COLORS:
+        r, g, b = to_rgb(color)
+        assert not (r > 0.75 and g < 0.35 and b < 0.35), color  # pas de rouge
+        assert 1.05 / (luminance(color) + 0.05) >= 2.0, color  # lisible sur fond blanc
+    assert TEMPERATURE_COLOR not in SERIES_COLORS and HUMIDITY_COLOR not in SERIES_COLORS
+    assert not set(TEMPERATURE_SHADES) & set(SERIES_COLORS)
+    distances = [np.linalg.norm(np.subtract(to_rgb(a), to_rgb(b)))
+                 for i, a in enumerate(SERIES_COLORS) for b in SERIES_COLORS[i + 1:]]
+    assert min(distances) > 0.15  # couleurs nettement différentes
+
+    x = np.arange(10.0)
+    series = [PlotSeries(gid=str(i), label="Channel {}".format(i), x=x, y=x * i, unit="V", quantity=VOLTAGE,
+                         key=("f", str(i)), color_index=i, color_total=25) for i in range(25)]
+    plot = PlotManager(Figure())
+    plot.draw(series)
+    looks = {(to_hex(line.get_color()), line.get_linestyle()) for line in plot.axes["main"].get_lines()}
+    assert len(looks) == 25

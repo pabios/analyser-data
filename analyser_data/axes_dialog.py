@@ -144,10 +144,11 @@ class AxesDialog(tk.Toplevel):
             ttk.Label(table, text=text, style="Muted.Card.TLabel").grid(row=0, column=col, sticky=tk.W, padx=6,
                                                                         pady=(0, 6))
         labels = {line.get_gid(): line.get_label() for a in plot.axes.values() for line in a.get_lines()}
+        dashes = {line.get_gid(): line.get_linestyle() for a in plot.axes.values() for line in a.get_lines()}
         gid_of = {key: gid for gid, key in self.app._gid_key.items()}
         self.curve_vars: Dict[Key, tuple] = {}
         for row, key in enumerate(self.keys, start=1):
-            style = self.settings.curves.get(key) or CurveStyle()
+            style = self.settings.curves.get(key) or CurveStyle(style=dashes.get(gid_of.get(key), "-"))
             shown = labels.get(gid_of.get(key), key[1])
             ttk.Label(table, text=key[1], style="Card.TLabel").grid(row=row, column=0, sticky=tk.W, padx=6, pady=2)
             name = tk.StringVar(value=shown)

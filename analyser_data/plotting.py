@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
-from matplotlib import cm
 from matplotlib.ticker import FuncFormatter, Locator, MaxNLocator
 
 from .channels import HUMIDITY, TEMPERATURE
@@ -140,24 +139,18 @@ class TimeLocator(Locator):
         return np.arange(start, vmax + step * 1e-6, step)
 
 
-def _cmap(name: str):
-    try:
-        import matplotlib
-
-        return matplotlib.colormaps[name]
-    except (AttributeError, KeyError):  # Matplotlib < 3.5
-        return cm.get_cmap(name)
-
-
 def _series_color(index: int, total: int) -> str:
     """Couleur de la voie de rang ``index`` : fixe, elle ne dépend pas des voies cochées (issue #4)."""
-    from matplotlib.colors import to_hex
-
     from .theme import SERIES_COLORS
 
-    if total <= len(SERIES_COLORS):
-        return SERIES_COLORS[index % len(SERIES_COLORS)]
-    return to_hex(_cmap("viridis")(0.9 * index / max(1, total - 1)))  # pas de rouge
+    return SERIES_COLORS[index % len(SERIES_COLORS)]
+
+
+def _default_dash(index: int) -> str:
+    """Trait par défaut : continu, puis tirets / pointillés quand la palette est épuisée."""
+    from .theme import SERIES_COLORS
+
+    return ("-", "--", ":", "-.")[(index // len(SERIES_COLORS)) % 4]
 
 
 def _default_colors(series: Sequence[PlotSeries]) -> Dict[str, str]:
@@ -300,7 +293,7 @@ class PlotManager:
                 self._traces[s.gid] = trace
                 self._refresh(trace, None)
                 continue
-            style = settings.curves.get(s.key) or CurveStyle()
+            style = settings.curves.get(s.key) or CurveStyle(style=_default_dash(max(0, s.color_index)))
             color = style.color or palette[s.gid]
             label = style.name or s.label
             if style.absolute and not style.name:
