@@ -2,3 +2,5 @@
 pytest>=7
 # Comme sous Anaconda : pandas utilise alors pyarrow (moteur regex RE2) pour le texte
 pyarrow
+# Pour fabriquer des classeurs .xls de test (l'application n'en a pas besoin)
+xlwt

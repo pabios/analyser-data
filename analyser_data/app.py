@@ -12,6 +12,7 @@ Disposition :
 """
 from __future__ import annotations
 
+import gc
 import queue
 import threading
 import traceback
@@ -31,6 +32,7 @@ from .dialogs import CleaningDialog
 from .editing import ClickCorrector
 from .export import Key
 from .help import HelpWindow
+from .import_dialog import ImportDialog, needs_dialog, preview_enabled
 from .loader import write_extract
 from .report import build_report, save_figure_image
 from .session import journal_path
@@ -41,7 +43,9 @@ from .i18n import _, get_language, load_language, set_language
 
 APP_TITLE = "Analyser DATA — MultiPlotter pour bancs d'essai"
 FILE_TYPES = [
-    ("Fichiers de mesure", "*.csv *.txt *.dat *.CSV *.TXT *.DAT"),
+    ("Fichiers de mesure", "*.csv *.txt *.dat *.xlsx *.xlsm *.xls *.CSV *.TXT *.DAT *.XLSX *.XLS"),
+    ("Texte (CSV, TXT, DAT)", "*.csv *.txt *.dat *.CSV *.TXT *.DAT"),
+    ("Classeurs Excel", "*.xlsx *.xlsm *.xls *.XLSX *.XLS"),
     ("Tous les fichiers", "*.*"),
 ]
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "exemples"
@@ -335,8 +339,15 @@ class AnalyserDataApp:
 
     # ==================================================================== actions
 
-    def open_files(self, paths: List[str] = None) -> None:
-        """US-01 : import (boîte de dialogue, ou liste de chemins pour les scripts)."""
+    def open_files(self, paths: List[str] = None, preview: bool = None) -> None:
+        """US-01 : import (boîte de dialogue, ou liste de chemins pour les scripts).
+
+        ``preview`` : fenêtre d'aperçu avant import (issue #10). Par défaut : selon la préférence
+        pour les fichiers choisis à la main, et toujours pour un classeur à plusieurs feuilles.
+        """
+        if self.busy:
+            return
+        interactive = paths is None
         if paths is None:
             paths = filedialog.askopenfilenames(
                 parent=self.root, title=_("Ouvrir des fichiers de mesure"),
@@ -345,6 +356,11 @@ class AnalyserDataApp:
         if not paths:
             return
         self._last_dir = str(Path(paths[0]).parent)
+        if preview is None:
+            preview = needs_dialog(paths) or (interactive and preview_enabled())
+        if preview:
+            ImportDialog(self, list(paths))
+            return
         self.run_in_background(
             _("Chargement de {} fichier(s)…").format(len(paths)),
             lambda progress: self.session.read_files(paths, progress),
@@ -361,7 +377,8 @@ class AnalyserDataApp:
         self._update_offset_range()
         self.redraw()
         if loaded:
-            self._set_status(_("{} fichier(s) chargé(s).").format(len(loaded)))
+            self._set_status(_("{} fichier(s) importé(s) : {} voie(s) tracée(s).").format(
+                len(loaded), sum(len(m.channels) for m in loaded)))
             notes = ["• {} : {}".format(m.name, " ".join(m.warnings)) for m in loaded if m.warnings]
             notes += ["• " + m.align_note for m in self.session.measurements.values() if m.align_note]
             if notes:
@@ -581,6 +598,9 @@ class AnalyserDataApp:
             except Exception as exc:  # remonté à l'utilisateur dans la boucle Tkinter
                 messages.put(("error", exc, traceback.format_exc()))
 
+        # Objets Tkinter des fenêtres fermées libérés ICI (fil principal) : sinon le ramasse-miettes
+        # peut le faire dans le fil de calcul et Tkinter écrit des erreurs dans la console.
+        gc.collect()
         threading.Thread(target=target, daemon=True).start()
         self.root.after(100, self._poll_background, messages, on_done, error_title)
 

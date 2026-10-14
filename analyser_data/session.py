@@ -79,10 +79,12 @@ class Session:
         return loaded, errors
 
     def read_files(
-        self, paths: Iterable, progress: Optional[Callable[[str], None]] = None
+        self, paths: Iterable, progress: Optional[Callable[[str], None]] = None,
+        options: Optional[Dict[str, dict]] = None,
     ) -> Tuple[List[Measurement], List[Tuple[Path, str]]]:
         """Lit les fichiers sans modifier la session (peut tourner en arrière-plan).
 
+        ``options[str(chemin)]`` : réglages d'import imposés (``sep``, ``sheet``).
         Renvoie (fichiers chargés, [(chemin, message d'erreur)]).
         """
         paths = list(paths)
@@ -94,7 +96,8 @@ class Session:
             prefix = _("Fichier {}/{} — ").format(i, len(paths)) if len(paths) > 1 else ""
             report = (lambda msg, p=prefix: progress(p + msg)) if progress else None
             try:
-                loaded.append(load_measurement(path, name=name, progress=report))
+                loaded.append(load_measurement(path, name=name, progress=report,
+                                               **(options or {}).get(str(path), {})))
             except LoadError as exc:
                 errors.append((Path(path), str(exc)))
         return loaded, errors

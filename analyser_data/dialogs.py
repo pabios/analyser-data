@@ -6,6 +6,7 @@ ne se fige jamais, même sur des fichiers de plusieurs millions de points.
 """
 from __future__ import annotations
 
+import gc
 import queue
 import threading
 import traceback
@@ -216,6 +217,9 @@ class CleaningDialog(tk.Toplevel):
             except queue.Empty:
                 self.after(80, poll)
 
+        # Objets Tkinter des fenêtres fermées libérés ICI (fil principal) : sinon le ramasse-miettes
+        # peut le faire dans le fil de calcul et Tkinter écrit des erreurs dans la console.
+        gc.collect()
         threading.Thread(target=target, daemon=True).start()
         self.after(80, poll)
 

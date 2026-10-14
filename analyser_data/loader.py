@@ -17,7 +17,9 @@ from __future__ import annotations
 import csv
 import io
 import math
+import os
 import re
+import tempfile
 import warnings
 from collections import Counter
 from dataclasses import dataclass, field
@@ -30,12 +32,18 @@ import pandas as pd
 from .channels import (
     DEFAULT_CHANNEL_UNIT, OTHER, Channel, make_channel, normalize_unit, quantity_of, split_name_unit,
 )
+from .excel import ExcelError, format_cell, is_excel, read_rows, sheet_names
 from .i18n import _
 
 TIME_COL = "Time_min"
 
 ENCODINGS = ("utf-8-sig", "cp1252", "latin-1")
 SEPARATORS = ("\t", ";", ",")  # par ordre de priorité ("," peut être un décimal)
+SPACE = " "  # colonnes séparées par des espaces (choix manuel, ou en dernier recours)
+# Formats acceptés (issue #10) ; d'autres (PDF, Word…) sont refusés avec un message clair
+TEXT_SUFFIXES = {".csv", ".txt", ".dat", ".tsv", ".asc", ""}
+UNSUPPORTED_SUFFIXES = {".pdf", ".doc", ".docx", ".odt", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".zip",
+                        ".rar", ".7z", ".exe", ".ods", ".mat", ".tdms"}
 SEPARATOR_NAMES = {"\t": "tabulation", ";": "point-virgule", ",": "virgule"}
 
 _TIME_NAME_RE = re.compile(
@@ -107,6 +115,7 @@ class Measurement:
     align_offset_min: float = 0.0  # décalage appliqué pour l'axe commun
     align_note: str = ""  # explication si le fichier n'a pas pu être recalé sur la référence
     warnings: List[str] = field(default_factory=list)
+    sheet: str = ""  # feuille Excel lue (classeurs .xlsx / .xls)
 
     @property
     def duration_min(self) -> float:
@@ -135,17 +144,33 @@ class Measurement:
 
 
 def load_measurement(
-    path, name: Optional[str] = None, progress: Optional[Callable[[str], None]] = None
+    path, name: Optional[str] = None, progress: Optional[Callable[[str], None]] = None,
+    sep: Optional[str] = None, sheet: Optional[str] = None,
 ) -> Measurement:
-    """Charge un fichier de mesure. Lève :class:`LoadError` si le fichier est non conforme.
+    """Charge un fichier de mesure (texte ou classeur Excel). Lève :class:`LoadError` si le
+    fichier est non conforme.
 
     ``progress(message)`` est appelé à chaque étape (lecture, conversion...).
+    ``sep`` : séparateur imposé (« ; », « , », tabulation, espace) au lieu de la détection.
+    ``sheet`` : feuille d'un classeur Excel (par défaut : la première).
     """
     path = Path(path)
+    name = name or path.name
+    progress = progress or (lambda _msg: None)
     try:
-        return _load(path, name or path.name, progress or (lambda _msg: None))
+        suffix = path.suffix.lower()
+        if suffix in UNSUPPORTED_SUFFIXES:
+            raise LoadError(_("Le format « {} » du fichier « {} » n'est pas pris en charge. Formats acceptés : "
+                              "CSV, TXT, DAT (texte) et Excel XLSX, XLS.").format(suffix, path.name))
+        if is_excel(path):
+            return _load_excel(path, name, progress, sheet)
+        if sep == SPACE:
+            return _load_via_csv(path, name, progress, _space_rows(path), "")
+        return _load(path, name, progress, sep)
     except LoadError:
         raise
+    except ExcelError as exc:
+        raise LoadError(str(exc)) from exc
     except Exception as exc:  # pragma: no cover - filet de sécurité
         raise LoadError(
             _("Le fichier « {} » n'a pas pu être lu : {}").format(path.name, exc)
@@ -215,7 +240,56 @@ HEAD_BYTES = 2 * 1024 * 1024  # début du fichier analysé (préambule + premiè
 TAIL_BYTES = 256 * 1024  # fin du fichier analysée (séparateur, nombre de colonnes)
 
 
-def _load(path: Path, name: str, progress: Callable[[str], None]) -> Measurement:
+def _load_excel(path: Path, name: str, progress: Callable[[str], None], sheet: Optional[str]) -> Measurement:
+    """Classeur Excel : la feuille est écrite en CSV temporaire, puis lue comme un fichier texte."""
+    names = sheet_names(path)
+    sheet = sheet or (names[0] if names else None)
+    rows = ([format_cell(v) for v in row] for row in read_rows(path, sheet, progress))
+    m = _load_via_csv(path, name, progress, rows, sheet)
+    if len(names) > 1:
+        m.warnings.insert(0, _("Feuille « {} » ({} feuilles dans le classeur).").format(sheet, len(names)))
+    return m
+
+
+def _load_via_csv(path: Path, name: str, progress, rows, sheet: str) -> Measurement:
+    """Lignes déjà découpées (Excel, colonnes séparées par des espaces) -> CSV « ; » temporaire."""
+    fd, temp = tempfile.mkstemp(suffix=".csv", prefix="analyser_data_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+            writer = csv.writer(fh, delimiter=";", lineterminator="\n")
+            count = 0
+            for row in rows:
+                while row and row[-1] == "":
+                    row = row[:-1]
+                writer.writerow(row)
+                count += 1
+        if not count:
+            raise LoadError(_("Le fichier « {} » est vide.").format(path.name))
+        try:
+            m = _load(Path(temp), name, progress, ";")
+        except LoadError as exc:  # messages : nom du fichier d'origine, pas du CSV temporaire
+            raise LoadError(str(exc).replace(Path(temp).name, path.name)) from None
+    finally:
+        try:
+            os.remove(temp)
+        except OSError:
+            pass
+    m.path, m.sheet = path, sheet or ""
+    if sheet is not None and not sheet:
+        m.separator = SPACE
+    return m
+
+
+def _space_rows(path: Path):
+    """Colonnes séparées par un ou plusieurs espaces (fichiers alignés en colonnes)."""
+    encoding = _detect_encoding(path)
+    with _open_text(path, encoding) as fh:
+        for line in fh:
+            if line.strip():
+                yield line.split()
+
+
+def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Optional[str] = None) -> Measurement:
     if not path.is_file():
         raise LoadError(_("Fichier introuvable : {}").format(path))
     size_mb = path.stat().st_size / 1e6
@@ -233,10 +307,19 @@ def _load(path: Path, name: str, progress: Callable[[str], None]) -> Measurement
     # Les dernières lignes du fichier sont toujours des mesures : sur un enregistrement court,
     # le préambule (30 lignes « AMP settings » d'un GL860) peut être plus long que les données
     # et fausser la détection (issues #8, #9).
-    sep, last = _trailing_data_block([line for line in tail if line.strip()][-300:])
+    sep, last = _trailing_data_block([line for line in tail if line.strip()][-300:],
+                                     (forced_sep,) if forced_sep else SEPARATORS)
     if sep is None:
-        sep = _detect_separator(sample, path.name, head)
-        last = sample[-50:]
+        if forced_sep:
+            sep, last = forced_sep, sample[-50:]
+        else:
+            try:
+                sep = _detect_separator(sample, path.name, head)
+            except LoadError:
+                if _looks_space_separated(sample):  # dernier recours : colonnes alignées par des espaces
+                    return _load_via_csv(path, name, progress, _space_rows(path), "")
+                raise
+            last = sample[-50:]
     merge_commas = sep == "," and _needs_comma_merge(list(csv.reader(sample, delimiter=sep)))
     if merge_commas:
         head, tail, sample, last = (_merge_decimal_commas(x) for x in (head, tail, sample, last))
@@ -570,12 +653,22 @@ def write_extract(path, out_path, head_lines: int = 80, tail_lines: int = 10) ->
     return out_path
 
 
-def _trailing_data_block(lines: List[str]) -> Tuple[Optional[str], List[str]]:
+def _looks_space_separated(lines: List[str]) -> bool:
+    """Lignes de mesure alignées par des espaces : même nombre (>= 2) de nombres par ligne."""
+    rows = [line.split() for line in lines[-50:] if line.strip()]
+    if len(rows) < 2:
+        return False
+    width = Counter(len(r) for r in rows).most_common(1)[0][0]
+    data = [r for r in rows if len(r) == width and sum(_is_value(f) for f in r) >= 2]
+    return width >= 2 and len(data) >= 0.6 * len(rows)
+
+
+def _trailing_data_block(lines: List[str], separators=SEPARATORS) -> Tuple[Optional[str], List[str]]:
     """Séparateur et dernières lignes de mesure : le bloc ininterrompu de lignes, en fin de
     fichier, qui ont toutes le même nombre de champs (au moins 3) que la dernière ligne.
     Indépendant de la longueur du préambule, même pour un enregistrement de 5 lignes."""
     best, best_block = None, []
-    for sep in SEPARATORS:
+    for sep in separators:
         rows = list(csv.reader(lines, delimiter=sep))
         while rows and sum(_is_value(f) for f in rows[-1]) < 2:
             rows.pop()  # lignes de fin sans mesures (bilan, commentaire) : ignorées ici

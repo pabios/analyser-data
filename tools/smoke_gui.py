@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 from PIL import ImageGrab  # noqa: E402
 
 from analyser_data import app as app_module  # noqa: E402
+from analyser_data.import_dialog import ImportDialog  # noqa: E402
 
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else ".dev-out")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -234,6 +235,52 @@ def main():
     pump(root)
     assert gui.plot.legend is not None and gui.plot_settings.legend == "right"
     print("axes et courbes : OK")
+
+    # Import (issue #10) : classeur Excel à 2 feuilles -> aperçu, choix de la feuille, import
+    import datetime as dt
+
+    import openpyxl
+    book = openpyxl.Workbook()
+    notes = book.active
+    notes.title = "Notes"
+    notes.append(["Essai du 10/07/2026", "opérateur : X"])
+    sheet = book.create_sheet("Mesures")
+    sheet.append(["Date&Time", "U_supply (V)", "I_EOM (mA)", "Température (°C)"])
+    for k in range(600):
+        sheet.append([dt.datetime(2026, 7, 10, 9, 44, 13) + dt.timedelta(seconds=k), 24 + (k % 120 < 60),
+                      150.0 if k % 120 < 60 else 0.0, 21.5 + k / 600])
+    workbook = OUT / "essai_excel.xlsx"
+    book.save(workbook)
+    gui.session.clear()
+    gui._checked.clear()
+    gui._rebuild_tree()
+    gui.open_files([str(workbook), str(EXAMPLES[0])], preview=True)
+    dialog = next(w for w in root.winfo_children() if isinstance(w, ImportDialog))
+
+    def wait_reads():
+        end = time.time() + 60
+        while len(dialog.results) < len(dialog.paths) and time.time() < end:
+            root.update()
+            time.sleep(0.05)
+        pump(root)
+
+    wait_reads()
+    assert isinstance(dialog.results[str(workbook)], str)  # 1re feuille « Notes » : pas de mesures
+    dialog.files.selection_set(str(workbook))
+    dialog.sheet_var.set("Mesures")
+    dialog._option_changed("sheet", "Mesures")
+    wait_reads()
+    shot_window(dialog, "18_import_excel.png")
+    dialog.files.selection_set(str(EXAMPLES[0]))
+    pump(root)
+    shot_window(dialog, "19_import_apercu.png")
+    dialog.accept()
+    pump(root)
+    assert len(gui.session.measurements) == 2, gui.session.measurements
+    excel = next(m for m in gui.session.measurements.values() if m.sheet == "Mesures")
+    assert [c.unit for c in excel.channels] == ["V", "mA", "°C"]
+    print("import Excel : OK —", gui.status.get())
+    shot(root, "20_excel_importe.png")
 
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
     shot_window(help_window, "12_aide.png")

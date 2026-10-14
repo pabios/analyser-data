@@ -33,12 +33,24 @@ def set_language(language: str, save: bool = True) -> None:
         raise ValueError(language)
     _language = language
     if save:
-        try:
-            config = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
-            config["language"] = language
-            CONFIG_FILE.write_text(json.dumps(config), encoding="utf-8")
-        except (OSError, ValueError):
-            pass
+        set_setting("language", language)
+
+
+def get_setting(key: str, default=None):
+    """Préférence mémorisée dans ``~/.analyser_data.json`` (ex. aperçu avant import)."""
+    try:
+        return json.loads(CONFIG_FILE.read_text(encoding="utf-8")).get(key, default)
+    except (OSError, ValueError, AttributeError):
+        return default
+
+
+def set_setting(key: str, value) -> None:
+    try:
+        config = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
+        config[key] = value
+        CONFIG_FILE.write_text(json.dumps(config), encoding="utf-8")
+    except (OSError, ValueError):
+        pass
 
 
 def load_language() -> str:

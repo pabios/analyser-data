@@ -11,18 +11,23 @@ from .theme import C
 # Clé de section (utilisée par les boutons « ? ») -> (titre FR, texte FR, titre EN, texte EN)
 SECTIONS = [
     ("Démarrer", "Démarrer", """\
-1. « Ouvrir des fichiers… » : choisissez un ou plusieurs exports (Graphtec, nanodac…).
-   Ouvrez le fichier d'origine de l'appareil, sans le passer par Excel (Excel coupe
-   au-delà de 1 048 576 lignes).
+1. « Ouvrir des fichiers… » : choisissez un ou plusieurs exports (Graphtec, nanodac…) en
+   texte (CSV, TXT, DAT) ou en classeur Excel (XLSX, XLS). La fenêtre « Import » montre
+   comment chaque fichier est lu (colonne temps, voies, premières lignes) : choisissez la
+   feuille d'un classeur, ou imposez le séparateur si la détection s'est trompée, puis
+   « Importer ». Préférez le fichier d'origine de l'appareil (Excel coupe au-delà de
+   1 048 576 lignes).
 2. Cochez les voies à afficher. Cliquer sur un nom de fichier coche / décoche toutes
    ses voies. Chaque voie s'affiche sous le nom de la centrale : « Channel 4 ».
 3. Nettoyez, corrigez, puis « Exporter » : seules les voies cochées sont exportées,
    avec les nettoyages et corrections.
 4. Langue : liste « FR / EN » en haut à droite (choix mémorisé).""",
      "Getting started", """\
-1. “Open files…”: choose one or more exports (Graphtec, nanodac…). Open the original
-   file from the device, without going through Excel (Excel truncates beyond
-   1,048,576 rows).
+1. “Open files…”: choose one or more exports (Graphtec, nanodac…) as text (CSV, TXT,
+   DAT) or Excel workbooks (XLSX, XLS). The “Import” window shows how each file is read
+   (time column, channels, first rows): choose a workbook's sheet, or force the
+   separator if detection went wrong, then “Import”. Prefer the device's original file
+   (Excel truncates beyond 1,048,576 rows).
 2. Tick the channels to display. Clicking a file name ticks / unticks all its
    channels. Each channel is shown with the data logger name: “Channel 4”.
 3. Clean, correct, then “Export”: only ticked channels are exported, with their

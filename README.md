@@ -39,7 +39,9 @@ python main.py
 
 ## Utilisation
 
-1. **Ouvrir des fichiers…** (essayer ceux du dossier `exemples/`).
+1. **Ouvrir des fichiers…** : CSV, TXT, DAT ou classeur **Excel** (XLSX, XLS). La fenêtre
+   **Import** montre comment chaque fichier est lu (temps, voies, premières lignes) ; on y
+   choisit la feuille d'un classeur ou on impose le séparateur. Essayer le dossier `exemples/`.
 2. Cocher les voies à afficher (elles portent le nom de la centrale : « Channel 4 » ; légende
    « Channel 4 (A) », température « Température ambiante » en rouge).
 3. **Nettoyer…** : supprime les pics parasites (quelle que soit leur hauteur) et **lisse le bruit
@@ -97,7 +99,7 @@ Les gros fichiers (plusieurs millions de lignes) sont lus en quelques secondes, 
 indicateur de chargement.
 
 Les fichiers bruts de l'appareil s'ouvrent directement, sans passer par Excel : séparateur
-`,` `;` ou tabulation et décimale `.` ou `,` dans toutes les combinaisons (y compris
+`,` `;`, tabulation ou espaces et décimale `.` ou `,` dans toutes les combinaisons (y compris
 `,` + `,`), avec ou sans guillemets, utf-8 / cp1252 / utf-16, fichiers réenregistrés par Excel.
 Temps en date/heure, `H:MM:SS`, ms, s ou min. Tout est détecté automatiquement.
 
