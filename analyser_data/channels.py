@@ -83,9 +83,23 @@ class Channel:
         return self.quantity in (TEMPERATURE, HUMIDITY)
 
 
+# Écritures du degré Celsius et de l'humidité relative rencontrées dans les exports (issue #11) :
+# « ℃ » (caractère unique des centrales japonaises), « Â°C » / « �C » (degré mal décodé),
+# « ° C », « oC », « Deg.C », « % RH », « RH% »…
+_CELSIUS_KEYS = {"°c", "c°", "degc", "degreec", "degreesc", "celsius", "oc", "°", "deg"}
+_HUMIDITY_KEYS = {"%rh", "rh%", "%hr", "hr%", "rh", "hr", "%hrel", "%rel"}
+
+
 def normalize_unit(unit: str) -> str:
-    """Normalise une unité ("mv" -> "mV", "deg C" -> "°C"). Renvoie l'unité telle quelle si inconnue."""
+    """Normalise une unité ("mv" -> "mV", "deg C" -> "°C", "℃" -> "°C"). Renvoie l'unité telle
+    quelle si inconnue."""
     cleaned = unit.strip()
+    key = re.sub(r"[\s.]", "", cleaned).lower()
+    key = key.replace("\u2103", "°c").replace("â°", "°").replace("\ufffd", "°").replace("º", "°")
+    if key in _CELSIUS_KEYS:
+        return "°C"
+    if key in _HUMIDITY_KEYS:
+        return "%HR"
     return _UNIT_ALIASES.get(cleaned.lower(), cleaned)
 
 

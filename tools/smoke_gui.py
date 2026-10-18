@@ -296,8 +296,25 @@ def main():
     assert len([d for d in dialogs if d[0] == "error"]) == errors_before + 1
     assert gui.temp_offset_var.get() == "+0,5" and gui.session.temperature_offset == 0.5
     shot(root, "21_correction_temperature.png")
+    gui.sidebar.canvas.yview_moveto(1.0)  # carte « Enceinte climatique », en bas de la colonne
+    pump(root)
+    shot(root, "23_carte_enceinte.png")
+    # Par sonde : la sonde du classeur Excel réglée à part (-0,3 °C), prioritaire sur +0,5 °C
+    from analyser_data.corrections_dialog import ProbeCorrectionsDialog
+    probes = ProbeCorrectionsDialog(gui)
+    pump(root)
+    probe = next(iter(probes.vars))
+    probes.vars[probe].set("-0,3")
+    shot_window(probes, "22_corrections_par_sonde.png")
+    probes.apply()
+    pump(root)
+    assert gui.session.value_offset(probe) == -0.3
+    assert any("(-0,3 °C)" in l.get_label() for a in gui.figure.axes for l in a.get_lines())
+    assert get_setting("channel_offsets") == {"{}::{}".format(*probe): -0.3}
+    gui.apply_probe_corrections({probe: None})
     gui.temp_offset_var.set("0")
     gui._on_temperature_offset()
+    assert gui.session.value_offset(probe) == 0.0
     print("correction de température : OK")
 
     help_window = app_module.HelpWindow.open(root, "Nettoyage")

@@ -145,11 +145,7 @@ def _summary_page(session, keys, view, title) -> Figure:
     if session.time_offset_min:
         lines.append(_("Décalage enceinte climatique : {:+.1f} min").format(session.time_offset_min))
     lines.append(_("Grille d'export : {}").format(_(EXPORT_STEPS[session.export_step_s])))
-    if session.temperature_offset:
-        from .session import format_offset
-
-        lines.append(_("Correction de température : {} °C (affichée = mesurée + correction)").format(
-            format_offset(session.temperature_offset)))
+    lines += session.corrections_summary(keys)
     for line in lines:
         fig.text(0.05, y, line, fontsize=8.5, color=C["fg_soft"])
         y -= 0.022

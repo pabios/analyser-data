@@ -33,6 +33,7 @@ from .editing import ClickCorrector
 from .export import Key
 from .help import HelpWindow
 from .import_dialog import ImportDialog, needs_dialog, preview_enabled
+from .corrections_dialog import ProbeCorrectionsDialog
 from .loader import write_extract
 from .report import build_report, save_figure_image
 from .session import journal_path
@@ -63,9 +64,13 @@ class AnalyserDataApp:
         self._gid_key: Dict[str, Key] = {}  # gid de courbe -> voie
         self._key_color: Dict[Key, str] = {}  # voie -> couleur de sa courbe
         self.plot_settings = PlotSettings()  # axes et courbes réglés par l'utilisateur (gardés au redessin)
-        try:  # correction de température mémorisée (issue #11)
+        try:  # corrections de température / d'humidité mémorisées (issue #11)
             self.session.set_temperature_offset(get_setting("temperature_offset", 0.0))
-        except ValueError:
+            self.session.set_humidity_offset(get_setting("humidity_offset", 0.0))
+            for key, value in (get_setting("channel_offsets", {}) or {}).items():
+                name, _sep, label = key.partition("::")
+                self.session.channel_offsets[(name, label)] = parse_temperature_offset(value)
+        except (ValueError, AttributeError):
             pass
         self._last_dir = str(EXAMPLES_DIR if EXAMPLES_DIR.is_dir() else Path.home())
         self.busy = False  # un traitement long tourne en arrière-plan
@@ -82,8 +87,9 @@ class AnalyserDataApp:
         self.check_images = CheckImages(root)
         self._build_ui()
         self._set_status(_("Prêt. Ouvrez un ou plusieurs fichiers de mesure.") + (
-            " " + _("Correction de température active : {} °C.").format(format_offset(self.session.temperature_offset))
-            if self.session.temperature_offset else ""))
+            " " + _("Corrections °C / %HR actives (carte Enceinte climatique).")
+            if self.session.temperature_offset or self.session.humidity_offset or self.session.channel_offsets
+            else ""))
 
     def _build_ui(self) -> None:
         self.root.title("{}  (v{})".format(_(APP_TITLE), __version__))
@@ -271,21 +277,16 @@ class AnalyserDataApp:
         ttk.Button(row, text="0", style="Icon.TButton", width=2,
                    command=lambda: self._set_offset(0.0)).pack(side=tk.LEFT)
 
-        # --- Issue #11 : correction de température (affichée = mesurée + correction)
+        # --- Issue #11 : corrections de température / d'humidité (affichée = mesurée + correction)
+        self.temp_offset_var = self._correction_row(shift, _("Correction de température"), "°C",
+                                                    self.session.temperature_offset, "temperature_offset")
+        self.hum_offset_var = self._correction_row(shift, _("Correction d'humidité"), "%HR",
+                                                   self.session.humidity_offset, "humidity_offset")
         row = ttk.Frame(shift, style="Card.TFrame")
-        row.pack(fill=tk.X, pady=(10, 0))
-        ttk.Label(row, text=_("Correction de température"), style="Card.TLabel").pack(side=tk.LEFT)
-        ttk.Label(row, text="°C", style="Card.TLabel").pack(side=tk.RIGHT, padx=(4, 0))
-        self.temp_offset_var = tk.StringVar(value=format_offset(self.session.temperature_offset))
-        low, high = TEMPERATURE_OFFSET_RANGE
-        self.temp_offset_box = ttk.Spinbox(row, from_=low, to=high, increment=TEMPERATURE_OFFSET_STEP, width=6,
-                                           textvariable=self.temp_offset_var, justify=tk.RIGHT,
-                                           command=self._on_temperature_offset)
-        self.temp_offset_box.pack(side=tk.RIGHT)
-        for event in ("<Return>", "<FocusOut>", "<KP_Enter>"):
-            self.temp_offset_box.bind(event, lambda _e: self._on_temperature_offset())
-        self.lbl_temp_offset = ttk.Label(shift, style="Muted.Card.TLabel")
-        self.lbl_temp_offset.pack(anchor=tk.W, pady=(2, 0))
+        row.pack(fill=tk.X, pady=(6, 0))
+        self.lbl_temp_offset = ttk.Label(row, style="Muted.Card.TLabel", wraplength=240, justify=tk.LEFT)
+        self.lbl_temp_offset.pack(side=tk.LEFT, anchor=tk.W)
+        ttk.Button(row, text=_("Par sonde…"), command=self.edit_probe_corrections).pack(side=tk.RIGHT, anchor=tk.N)
         self._show_temperature_offset()
 
         # --- US-05 : correction au clic
@@ -756,6 +757,7 @@ class AnalyserDataApp:
             lines.append(_("★ référence de temps"))
         self.lbl_reference.config(text="\n".join(lines))
         self._update_window_label()
+        self._show_temperature_offset()  # « N sonde(s) à part » selon les fichiers ouverts
 
     def _update_window_label(self) -> None:
         s = self.session
@@ -831,32 +833,77 @@ class AnalyserDataApp:
         self.session.time_offset_min = value
         self.plot.set_time_offset(value)
 
+    def _correction_row(self, parent, label: str, unit: str, value: float, setting: str) -> tk.StringVar:
+        """Champ de correction générale (-5,0 à +5,0, pas de 0,1), validé à Entrée / en quittant."""
+        row = ttk.Frame(parent, style="Card.TFrame")
+        row.pack(fill=tk.X, pady=(10 if setting == "temperature_offset" else 4, 0))
+        ttk.Label(row, text=label, style="Card.TLabel").pack(side=tk.LEFT)
+        ttk.Label(row, text=unit, style="Card.TLabel", width=4).pack(side=tk.RIGHT, padx=(4, 0))
+        var = tk.StringVar(value=format_offset(value))
+        low, high = TEMPERATURE_OFFSET_RANGE
+        box = ttk.Spinbox(row, from_=low, to=high, increment=TEMPERATURE_OFFSET_STEP, width=6, textvariable=var,
+                          justify=tk.RIGHT, command=lambda: self._on_correction(setting))
+        box.pack(side=tk.RIGHT)
+        for event in ("<Return>", "<FocusOut>", "<KP_Enter>"):
+            box.bind(event, lambda _e: self._on_correction(setting))
+        return var
+
     def _on_temperature_offset(self) -> None:
-        """Correction de température saisie : vérifiée, mémorisée, appliquée à l'affichage."""
-        text = self.temp_offset_var.get()
+        self._on_correction("temperature_offset")
+
+    def _on_correction(self, setting: str) -> None:
+        """Correction générale saisie : vérifiée, mémorisée, appliquée à l'affichage."""
+        temperature = setting == "temperature_offset"
+        var, unit = (self.temp_offset_var, "°C") if temperature else (self.hum_offset_var, "%HR")
+        current = self.session.temperature_offset if temperature else self.session.humidity_offset
         try:
-            value = parse_temperature_offset(text)
+            value = parse_temperature_offset(var.get(), unit)
         except ValueError as exc:
-            messagebox.showerror(_("Correction de température"), str(exc), parent=self.root)
-            self.temp_offset_var.set(format_offset(self.session.temperature_offset))
+            messagebox.showerror(_("Correction de température") if temperature else _("Correction d'humidité"),
+                                 str(exc), parent=self.root)
+            var.set(format_offset(current))
             return
-        changed = value != self.session.temperature_offset
-        self.session.set_temperature_offset(value)
-        set_setting("temperature_offset", value)
-        self.temp_offset_var.set(format_offset(value))
+        (self.session.set_temperature_offset if temperature else self.session.set_humidity_offset)(value)
+        set_setting(setting, value)
+        var.set(format_offset(value))
+        if value != current:
+            self._corrections_changed(_("Correction générale : {} {} appliquée aux voies {} (affichage et exports).")
+                                      .format(format_offset(value), unit, unit))
+
+    def edit_probe_corrections(self) -> None:
+        if self.session.measurements:
+            ProbeCorrectionsDialog(self)
+        else:
+            messagebox.showinfo(_("Corrections par sonde"), _("Ouvrez d'abord des fichiers de mesure."),
+                                parent=self.root)
+
+    def apply_probe_corrections(self, values) -> None:
+        """Corrections propres à chaque sonde (fenêtre « Par sonde… »), mémorisées."""
+        for key, value in values.items():
+            self.session.set_channel_offset(key, value)
+        set_setting("channel_offsets", {"{}::{}".format(*k): v for k, v in self.session.channel_offsets.items()})
+        own = sum(1 for k in values if k in self.session.channel_offsets)
+        self._corrections_changed(_("Corrections par sonde appliquées ({} sonde(s) réglée(s) à part).").format(own))
+
+    def _corrections_changed(self, message: str) -> None:
         self._show_temperature_offset()
-        if changed:
-            view = self.plot.current_view()
-            self._redraw_with_view(view)
-            self._set_status(_("Correction de température : {} °C appliquée aux voies °C (affichage et exports).")
-                             .format(format_offset(value)))
+        self._redraw_with_view(self.plot.current_view())
+        self._set_status(message)
 
     def _show_temperature_offset(self) -> None:
-        value = self.session.temperature_offset
+        s = self.session
+        parts = []
+        if s.temperature_offset:
+            parts.append("{} °C".format(format_offset(s.temperature_offset)))
+        if s.humidity_offset:
+            parts.append("{} %HR".format(format_offset(s.humidity_offset)))
+        own = [k for k in s.channel_offsets if k[0] in s.measurements]
+        if own:
+            parts.append(_("{} sonde(s) à part").format(len(own)))
         self.lbl_temp_offset.configure(
-            text=_("Active : température affichée = mesurée {} °C").format(format_offset(value)) if value
-            else _("Aucune correction (0,0 °C)"),
-            foreground=C["fg"] if value else C["muted_fg"])
+            text=_("Active : valeur affichée = mesurée + correction ({})").format(" · ".join(parts)) if parts
+            else _("Aucune correction (0,0)"),
+            foreground=C["fg"] if parts else C["muted_fg"])
 
     def _set_offset(self, value: float) -> None:
         self.offset_var.set(value)

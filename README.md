@@ -53,8 +53,8 @@ python main.py
    ![Fenêtre de nettoyage](docs/captures/4-fenetre-nettoyage.png)
 4. **Clic gauche** sur un point abîmé pour le corriger (interpolation avec ses voisins).
 5. Carte **Enceinte climatique** : curseur de décalage dans le temps (enceinte en retard) et
-   **correction de température** de -5,0 à +5,0 °C (affichée = mesurée + correction, reprise
-   dans les exports et le journal, mémorisée).
+   **corrections de température et d'humidité** de -5,0 à +5,0 (générales ou **par sonde**,
+   affichée = mesurée + correction, reprises dans les exports et le journal, mémorisées).
 6. Icône **Modifier les axes et les courbes** (barre d'outils du graphique) : titre, début / fin
    du temps en H:MM:SS, min / max / titre / échelle log de chaque axe Y, nom, couleur, épaisseur,
    trait et **valeur absolue |x|** de chaque voie, position de la **légende** (toujours hors

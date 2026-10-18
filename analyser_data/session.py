@@ -20,7 +20,7 @@ from .cleaning import (
 from .editing import interpolate_at
 from .export import Key, merge_selection, write_csv
 from .loader import TIME_COL, LoadError, Measurement, align_time_axes, load_measurement
-from .channels import TEMPERATURE, Channel
+from .channels import HUMIDITY, TEMPERATURE, Channel
 from .plotting import PlotSeries
 from .i18n import _, get_language
 
@@ -48,14 +48,14 @@ TEMPERATURE_OFFSET_RANGE = (-5.0, 5.0)  # °C
 TEMPERATURE_OFFSET_STEP = 0.1
 
 
-def parse_temperature_offset(text) -> float:
-    """« +0,5 » / « -1.2 » -> valeur arrondie au pas de 0,1 °C. ValueError (message lisible)
-    si le texte n'est pas un nombre ou sort de la plage autorisée."""
+def parse_temperature_offset(text, unit: str = "°C") -> float:
+    """« +0,5 » / « -1.2 » -> valeur arrondie au pas de 0,1. ValueError (message lisible) si le
+    texte n'est pas un nombre ou sort de la plage autorisée (-5,0 à +5,0 °C ou %HR)."""
     low, high = TEMPERATURE_OFFSET_RANGE
-    message = _("Correction de température invalide : « {} ». Saisissez une valeur entre {} et {} °C "
-                "(pas de 0,1 °C).").format(text, format_offset(low), format_offset(high))
+    message = _("Correction invalide : « {} ». Saisissez une valeur entre {} et {} {} (pas de 0,1).").format(
+        text, format_offset(low), format_offset(high), unit)
     try:
-        value = float(str(text).strip().replace(",", ".").replace("°C", "").replace("+", "") or 0)
+        value = float(str(text).strip().replace(",", ".").replace(unit, "").replace("°C", "").replace("+", "") or 0)
     except ValueError:
         raise ValueError(message) from None
     if not (math.isfinite(value) and low - 1e-9 <= value <= high + 1e-9):
@@ -81,7 +81,11 @@ class Session:
         self.export_step_s: Optional[float] = None
         self.noise_thresholds: Dict[Key, Optional[float]] = {}  # seuils de bruit réglés par voie
         self.offsets: Dict[Key, Optional[float]] = {}  # décalages de zéro réglés par voie
-        self.temperature_offset = 0.0  # correction ajoutée aux voies °C (affichage et exports)
+        # Corrections ajoutées aux voies °C / %HR (affichage et exports, issue #11) : valeur
+        # générale par grandeur, ou valeur propre à une sonde (prioritaire)
+        self.temperature_offset = 0.0
+        self.humidity_offset = 0.0
+        self.channel_offsets: Dict[Key, float] = {}
         self.journal: List[Tuple[pd.Timestamp, str]] = []  # traçabilité des traitements
 
     # ------------------------------------------------------------------ journal
@@ -142,9 +146,8 @@ class Session:
                 _(" · du {} au {}").format(m.start.strftime("%d/%m/%Y %H:%M:%S"), end.strftime("%d/%m/%Y %H:%M:%S"))
                 if end is not None else "",
                 ", ".join(ch.label for ch in m.channels)))
-            if self.temperature_offset and any(ch.quantity == TEMPERATURE for ch in m.channels):
-                self.log(_("Correction de température : {} °C (température affichée = mesurée + correction)")
-                         .format(format_offset(self.temperature_offset)))
+            for text in self.corrections_summary([(m.name, ch.label) for ch in m.channels]):
+                self.log(text)
         self._realign()
 
     def remove_file(self, name: str) -> None:
@@ -342,10 +345,9 @@ class Session:
             out.append(
                 PlotSeries(
                     gid=str(i),
-                    label=legend_label(ch, temperatures.index((name, label)) + 1 if len(temperatures) > 1
-                                       and (name, label) in temperatures else 0)
-                    + (" ({} °C)".format(format_offset(self.temperature_offset))
-                       if ch.quantity == TEMPERATURE and self.temperature_offset else ""),
+                    label=self._legend_with_correction(ch, (name, label), temperatures.index((name, label)) + 1
+                                                       if len(temperatures) > 1 and (name, label) in temperatures
+                                                       else 0),
                     x=x,
                     y=y,
                     unit=ch.unit,
@@ -367,20 +369,70 @@ class Session:
     # ------------------------------------------------------- correction de température
 
     def set_temperature_offset(self, value: float) -> None:
-        """Correction ajoutée à toutes les voies °C à l'affichage et aux exports ; les données
+        """Correction générale ajoutée aux voies °C à l'affichage et aux exports ; les données
         mesurées ne sont pas modifiées (la correction peut être changée ou retirée)."""
         value = parse_temperature_offset(value)
-        if value == self.temperature_offset:
+        if value != self.temperature_offset:
+            self.temperature_offset = value
+            self._log_correction(_("toutes les voies °C"), value, "°C")
+
+    def set_humidity_offset(self, value: float) -> None:
+        """Correction générale ajoutée aux voies %HR."""
+        value = parse_temperature_offset(value, "%HR")
+        if value != self.humidity_offset:
+            self.humidity_offset = value
+            self._log_correction(_("toutes les voies %HR"), value, "%HR")
+
+    def set_channel_offset(self, key: Key, value: Optional[float]) -> None:
+        """Correction propre à une sonde (prioritaire sur la valeur générale) ; None : la retire."""
+        unit = self.measurements[key[0]].channel(key[1]).unit if key[0] in self.measurements else "°C"
+        if value is None:
+            if self.channel_offsets.pop(key, None) is not None and key[0] in self.measurements:
+                self.log(_("Correction propre à {} [{}] retirée : valeur générale").format(key[1], key[0]))
             return
-        self.temperature_offset = value
+        value = parse_temperature_offset(value, unit)
+        if self.channel_offsets.get(key) != value:
+            self.channel_offsets[key] = value
+            if key[0] in self.measurements:
+                self._log_correction("{} [{}]".format(key[1], key[0]), value, unit)
+
+    def _log_correction(self, target: str, value: float, unit: str) -> None:
         if self.measurements:
-            self.log(_("Correction de température : {} °C (température affichée = mesurée + correction)").format(
-                format_offset(value)))
+            self.log(_("Correction {} : {} {} (valeur affichée = mesurée + correction)").format(
+                target, format_offset(value), unit))
 
     def value_offset(self, key: Key) -> float:
-        """Correction à ajouter aux valeurs de la voie (température seulement)."""
+        """Correction à ajouter aux valeurs de la voie (température et humidité seulement)."""
         ch = self.measurements[key[0]].channel(key[1])
-        return self.temperature_offset if ch.quantity == TEMPERATURE else 0.0
+        if ch.quantity not in (TEMPERATURE, HUMIDITY):
+            return 0.0
+        if key in self.channel_offsets:
+            return self.channel_offsets[key]
+        return self.temperature_offset if ch.quantity == TEMPERATURE else self.humidity_offset
+
+    def _legend_with_correction(self, ch: Channel, key: Key, number: int) -> str:
+        """« Température ambiante (+0,5 °C) », « Channel 4 (-1,2 %HR) » : correction visible."""
+        label = legend_label(ch, number)
+        offset = self.value_offset(key)
+        if not offset:
+            return label
+        suffix = " ({})".format(ch.unit)
+        if label.endswith(suffix):
+            label = label[: -len(suffix)]
+        return "{} ({} {})".format(label, format_offset(offset), ch.unit)
+
+    def corrections_summary(self, keys: Optional[Sequence[Key]] = None) -> List[str]:
+        """Corrections actives sur ces voies (toutes par défaut), pour le journal et le rapport."""
+        keys = keys if keys is not None else [(m.name, c.label) for m in self.measurements.values()
+                                              for c in m.channels]
+        lines = []
+        for key in keys:
+            offset = self.value_offset(key)
+            if offset:
+                ch = self.measurements[key[0]].channel(key[1])
+                lines.append(_("Correction {} [{}] : {} {} (valeur affichée = mesurée + correction)").format(
+                    key[1], key[0], format_offset(offset), ch.unit))
+        return lines
 
     def displayed_values(self, key: Key) -> np.ndarray:
         """Valeurs telles qu'affichées et exportées (correction de température comprise)."""
@@ -404,8 +456,7 @@ class Session:
         write_csv(df, path)
         self.log(_("Export CSV : {} ({} lignes × {} voies, base de temps : {}, grille : {})").format(
             Path(path).name, len(df), len(keys), _(TIME_MODES[self.time_mode]), _(EXPORT_STEPS[self.export_step_s]))
-            + (_(" ; correction de température {} °C incluse").format(format_offset(self.temperature_offset))
-               if self.temperature_offset and any(self.value_offset(k) for k in keys) else ""))
+            + (_(" ; corrections °C / %HR incluses") if any(self.value_offset(k) for k in keys) else ""))
         journal_path(path).write_text(self.journal_text(), encoding="utf-8")
         return df
 

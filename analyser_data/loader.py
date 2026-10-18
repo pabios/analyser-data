@@ -763,7 +763,7 @@ def _is_partial_data_row(row: List[str], n_cols: int, signature: Optional[set]) 
     return sum(_is_value(c) for c in cells) >= 2 and all(not c or _is_value(c) for c in cells)
 
 
-_UNIT_CELL_RE = re.compile(r"^[%°ºµA-Za-z/.\- ]{0,8}$")
+_UNIT_CELL_RE = re.compile(r"^[%°ºµ\u2103\ufffdÂA-Za-z/.\- ]{0,8}$")  # « ℃ », degré mal décodé compris
 
 
 _ALARM_LABEL_RE = re.compile(r"^[A-Za-z]\d{3,}$")  # « A1234567890 » (GL860)

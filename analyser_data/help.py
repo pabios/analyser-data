@@ -167,12 +167,14 @@ pour avoir une valeur de chaque appareil sur chaque ligne (mesure la plus proche
 Décalage enceinte climatique : décale les courbes des fichiers ne contenant que des
 °C / %HR (nanodac) si l'enceinte réagit avec retard.
 
-Correction de température (carte « Enceinte climatique ») : valeur de -5,0 à +5,0 °C, par
-pas de 0,1 °C, ajoutée à toutes les voies de température : température affichée =
-température mesurée + correction. Elle s'applique au graphique, à la légende
-(« Température ambiante (+0,5 °C) »), au CSV, à l'image et au rapport PDF, et elle est
-notée dans le journal. Les mesures d'origine ne sont jamais modifiées : remettez 0 pour
-les retrouver. La valeur est mémorisée d'un lancement à l'autre.""",
+Corrections de température et d'humidité (carte « Enceinte climatique ») : valeur de
+-5,0 à +5,0 (°C ou %HR), par pas de 0,1, ajoutée aux voies de la grandeur : valeur
+affichée = valeur mesurée + correction. « Par sonde… » donne à une sonde sa propre
+correction, prioritaire sur la valeur générale (champ vide : valeur générale). Les
+corrections s'appliquent au graphique, à la légende (« Température ambiante (+0,5 °C) »),
+au CSV, à l'image et au rapport PDF, et sont notées dans le journal. Les mesures d'origine
+ne sont jamais modifiées : remettez 0 pour les retrouver. Les valeurs sont mémorisées
+d'un lancement à l'autre (par sonde : d'après le nom du fichier et de la voie).""",
      "Time base", """\
 To overlay several files:
 • Real time: each measurement at its clock time (same test, devices on time).
@@ -187,12 +189,14 @@ value from each device on every row (nearest measurement).
 Climatic chamber shift: shifts the curves of files that only contain °C / %RH
 (nanodac) if the chamber lags.
 
-Temperature correction (“Climatic chamber” card): value from -5.0 to +5.0 °C, in 0.1 °C
-steps, added to every temperature channel: displayed temperature = measured
-temperature + correction. It applies to the chart, the legend (“Ambient temperature
-(+0.5 °C)”), the CSV, the image and the PDF report, and is recorded in the log. The
-original measurements are never changed: set 0 to get them back. The value is
-remembered between launches."""),
+Temperature and humidity corrections (“Climatic chamber” card): value from -5.0 to
++5.0 (°C or %RH), in 0.1 steps, added to the channels of that quantity: displayed value
+= measured value + correction. “Per probe…” gives a probe its own correction, which
+overrides the general value (empty field: general value). Corrections apply to the
+chart, the legend (“Ambient temperature (+0.5 °C)”), the CSV, the image and the PDF
+report, and are recorded in the log. The original measurements are never changed: set
+0 to get them back. Values are remembered between launches (per probe: by file and
+channel name)."""),
 
     ("Livrables pour le client", "Livrables pour le client", """\
 Menu « Exporter » :
