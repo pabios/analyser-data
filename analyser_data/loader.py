@@ -30,7 +30,8 @@ import numpy as np
 import pandas as pd
 
 from .channels import (
-    DEFAULT_CHANNEL_UNIT, OTHER, Channel, make_channel, normalize_unit, quantity_of, split_name_unit,
+    CURRENT, DEFAULT_CHANNEL_UNIT, OTHER, VOLTAGE, Channel, make_channel, normalize_unit, quantity_of,
+    split_name_unit,
 )
 from .excel import ExcelError, format_cell, is_excel, read_rows, sheet_names
 from .i18n import _
@@ -123,11 +124,14 @@ class Measurement:
 
     @property
     def is_thermal(self) -> bool:
-        """Fichier d'enceinte climatique : uniquement des voies °C / %HR (ex. nanodac).
+        """Fichier d'enceinte climatique (ex. nanodac) : des voies °C / %HR et aucune voie
+        électrique (V, A). Les autres colonnes (consigne, sortie de régulation en %, état de
+        porte, unité inconnue…) ne l'empêchent pas (issue #13).
 
         Ses courbes suivent le curseur de décalage temporel (retard du banc thermique).
         """
-        return all(ch.is_climatic for ch in self.channels)
+        return any(ch.is_climatic for ch in self.channels) and not any(
+            ch.quantity in (VOLTAGE, CURRENT) for ch in self.channels)
 
     @property
     def period_label(self) -> str:

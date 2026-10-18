@@ -31,6 +31,7 @@ def merge_selection(
     step_s: Optional[float] = None,
     percent: bool = False,
     value_offsets: Optional[Dict[Key, float]] = None,
+    shifted_files: Optional[set] = None,
 ) -> pd.DataFrame:
     """Table unique : temps, puis une colonne par voie sélectionnée.
 
@@ -64,7 +65,7 @@ def merge_selection(
     for name, labels in wanted.items():
         m = by_name[name]
         # Les fichiers d'enceinte climatique sont décalés comme à l'écran
-        shifted = m.is_thermal and shift != 0.0
+        shifted = (name in shifted_files if shifted_files is not None else m.is_thermal) and shift != 0.0
         part = m.data[[TIME_COL] + labels].copy()
         if shifted:
             part[TIME_COL] = part[TIME_COL] + shift

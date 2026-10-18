@@ -44,6 +44,7 @@ from .theme import C, CheckImages, ScrollFrame, apply_theme, bordered, card, sep
 from .i18n import _, get_language, get_setting, load_language, set_language, set_setting
 
 APP_TITLE = "Analyser DATA — MultiPlotter pour bancs d'essai"
+AUTO_SHIFT = "Automatique (fichiers d'enceinte)"
 FILE_TYPES = [
     ("Fichiers de mesure", "*.csv *.txt *.dat *.xlsx *.xlsm *.xls *.CSV *.TXT *.DAT *.XLSX *.XLS"),
     ("Texte (CSV, TXT, DAT)", "*.csv *.txt *.dat *.CSV *.TXT *.DAT"),
@@ -276,6 +277,16 @@ class AnalyserDataApp:
         self.lbl_offset.pack(side=tk.LEFT, padx=(8, 6))
         ttk.Button(row, text="0", style="Icon.TButton", width=2,
                    command=lambda: self._set_offset(0.0)).pack(side=tk.LEFT)
+        # Fichier qui suit le curseur (issue #13) : automatique, ou choisi à la main
+        row = ttk.Frame(shift, style="Card.TFrame")
+        row.pack(fill=tk.X, pady=(6, 0))
+        ttk.Label(row, text=_("Fichier décalé"), style="Card.TLabel").pack(side=tk.LEFT, padx=(0, 6))
+        self.shifted_var = tk.StringVar(value=_(AUTO_SHIFT))
+        self.shifted_box = ttk.Combobox(row, textvariable=self.shifted_var, state="readonly", width=26)
+        self.shifted_box.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.shifted_box.bind("<<ComboboxSelected>>", lambda _e: self._on_shifted_file())
+        self.lbl_shifted = ttk.Label(shift, style="Muted.Card.TLabel", wraplength=330, justify=tk.LEFT)
+        self.lbl_shifted.pack(anchor=tk.W, pady=(2, 0))
 
         # --- Issue #11 : corrections de température / d'humidité (affichée = mesurée + correction)
         self.temp_offset_var = self._correction_row(shift, _("Correction de température"), "°C",
@@ -758,6 +769,9 @@ class AnalyserDataApp:
         self.lbl_reference.config(text="\n".join(lines))
         self._update_window_label()
         self._show_temperature_offset()  # « N sonde(s) à part » selon les fichiers ouverts
+        self._update_shifted_choices()
+        if abs(self.offset_var.get() - self.session.time_offset_min) > 1e-9:  # curseur = session
+            self._set_offset(self.session.time_offset_min)
 
     def _update_window_label(self) -> None:
         s = self.session
@@ -832,6 +846,29 @@ class AnalyserDataApp:
         self.lbl_offset.config(text=_("{:+.1f} min").format(value).replace(".", ",") if value else "0,0 min")
         self.session.time_offset_min = value
         self.plot.set_time_offset(value)
+
+    def _update_shifted_choices(self) -> None:
+        """Liste « Fichier décalé » et rappel des fichiers qui suivent le curseur."""
+        names = list(self.session.measurements)
+        self.shifted_box.configure(values=[_(AUTO_SHIFT)] + names)
+        if self.session.shifted_file not in names:
+            self.session.shifted_file = None
+        self.shifted_var.set(self.session.shifted_file or _(AUTO_SHIFT))
+        shifted = [m.name for m in self.session.measurements.values() if self.session.is_shifted(m)]
+        if shifted:
+            text = _("Suivent le curseur : {} (toutes leurs colonnes)").format(", ".join(shifted))
+        elif names:
+            text = _("Aucun fichier d'enceinte reconnu : choisissez le fichier à décaler dans la liste.")
+        else:
+            text = ""
+        self.lbl_shifted.configure(text=text)
+
+    def _on_shifted_file(self) -> None:
+        choice = self.shifted_var.get()
+        self.session.set_shifted_file(None if choice == _(AUTO_SHIFT) else choice)
+        self._update_shifted_choices()
+        self._redraw_with_view(self.plot.current_view())
+        self._set_status(_("Décalage dans le temps : {}").format(self.lbl_shifted.cget("text")))
 
     def _correction_row(self, parent, label: str, unit: str, value: float, setting: str) -> tk.StringVar:
         """Champ de correction générale (-5,0 à +5,0, pas de 0,1), validé à Entrée / en quittant."""

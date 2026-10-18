@@ -76,6 +76,7 @@ class Session:
         self._raw: Dict[str, pd.DataFrame] = {}  # copie des données brutes, pour restaurer
         self.reference: Optional[Measurement] = None
         self.time_offset_min = 0.0  # décalage des courbes climatiques (minutes)
+        self.shifted_file: Optional[str] = None  # fichier qui suit le décalage (None : fichiers d'enceinte)
         self.time_mode = "real"
         self.window: Optional[Tuple[float, float]] = None  # période commune (minutes)
         self.export_step_s: Optional[float] = None
@@ -161,6 +162,7 @@ class Session:
         self._raw.clear()
         self.reference = None
         self.time_offset_min = 0.0
+        self.shifted_file = None
         self.window = None
         self.noise_thresholds.clear()
         self.offsets.clear()
@@ -352,7 +354,7 @@ class Session:
                     y=y,
                     unit=ch.unit,
                     quantity=ch.quantity,
-                    shiftable=m.is_thermal and not self.percent_axis,
+                    shiftable=self.is_shifted(m) and not self.percent_axis,
                     index_base=first,
                     key=(name, label),
                     color_index=rank.get((name, label), -1),
@@ -365,6 +367,24 @@ class Session:
                                       quantity=ch.quantity, shiftable=out[-1].shiftable, index_base=first, raw=True,
                                       key=(name, label)))
         return out
+
+    # ------------------------------------------------------- décalage dans le temps
+
+    def is_shifted(self, m: Measurement) -> bool:
+        """Le fichier suit-il le curseur de décalage dans le temps ? (issue #13)"""
+        if self.shifted_file is not None and self.shifted_file in self.measurements:
+            return m.name == self.shifted_file
+        return m.is_thermal
+
+    def set_shifted_file(self, name: Optional[str]) -> None:
+        """Fichier décalé choisi à la main (None : fichiers d'enceinte détectés automatiquement)."""
+        if name == self.shifted_file:
+            return
+        self.shifted_file = name
+        if self.measurements:
+            self.log(_("Décalage dans le temps appliqué à : {}").format(
+                name if name else ", ".join(m.name for m in self.measurements.values() if m.is_thermal)
+                or _("aucun fichier")))
 
     # ------------------------------------------------------- correction de température
 
@@ -450,6 +470,7 @@ class Session:
             list(self.measurements.values()), self.reference, keys, self.time_offset_min,
             window=self.window, step_s=self.export_step_s, percent=self.percent_axis,
             value_offsets={key: self.value_offset(key) for key in keys},
+            shifted_files={m.name for m in self.measurements.values() if self.is_shifted(m)},
         )
         if progress:
             progress(_("Écriture de {} lignes dans {}…").format(len(df), Path(path).name), 0.5)

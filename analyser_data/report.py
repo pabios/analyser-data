@@ -143,7 +143,8 @@ def _summary_page(session, keys, view, title) -> Figure:
     if view is not None and not session.percent_axis:
         lines.append(_("Période représentée : {} → {}").format(format_hms(view[0]), format_hms(view[1])))
     if session.time_offset_min:
-        lines.append(_("Décalage enceinte climatique : {:+.1f} min").format(session.time_offset_min))
+        lines.append(_("Décalage enceinte climatique : {:+.1f} min").format(session.time_offset_min) + " ({})".format(
+            ", ".join(m.name for m in session.measurements.values() if session.is_shifted(m)) or "—"))
     lines.append(_("Grille d'export : {}").format(_(EXPORT_STEPS[session.export_step_s])))
     lines += session.corrections_summary(keys)
     for line in lines:

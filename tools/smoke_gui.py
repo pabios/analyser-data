@@ -6,10 +6,12 @@ exporte, et enregistre des captures d'écran dans le dossier passé en argument.
 Usage : ./dev.sh smoke   (captures dans .dev-out/)
         python tools/smoke_gui.py <dossier> <gros_fichier.csv>   (teste aussi un gros fichier)
 """
-import time
 import sys
+import time
 import tkinter as tk
 from pathlib import Path
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -297,8 +299,22 @@ def main():
     assert gui.temp_offset_var.get() == "+0,5" and gui.session.temperature_offset == 0.5
     shot(root, "21_correction_temperature.png")
     gui.sidebar.canvas.yview_moveto(1.0)  # carte « Enceinte climatique », en bas de la colonne
+    # Issue #13 : fichier décalé choisi à la main -> toutes ses colonnes suivent le curseur
+    excel_name = next(n for n, m in gui.session.measurements.items() if m.sheet)
+    gui.shifted_var.set(excel_name)
+    gui._on_shifted_file()
+    gui._set_offset(-4.0)
     pump(root)
+    assert excel_name in gui.lbl_shifted.cget("text")
+    shifted = [t for t in gui.plot._traces.values() if t.shiftable]
+    assert len(shifted) == len(gui.session.measurements[excel_name].channels), len(shifted)
+    excel_t0 = gui.session.measurements[excel_name].data["Time_min"].iloc[0]
+    for t in shifted:  # point tracé = temps enregistré - 4 min, pour toutes ses colonnes
+        assert np.allclose(t.line.get_xdata() - t.x[t.index], -4.0), excel_t0
     shot(root, "23_carte_enceinte.png")
+    gui.shifted_var.set(gui.shifted_box.cget("values")[0])
+    gui._on_shifted_file()
+    gui._set_offset(0.0)
     # Par sonde : la sonde du classeur Excel réglée à part (-0,3 °C), prioritaire sur +0,5 °C
     from analyser_data.corrections_dialog import ProbeCorrectionsDialog
     probes = ProbeCorrectionsDialog(gui)

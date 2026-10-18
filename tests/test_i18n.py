@@ -9,7 +9,7 @@ from analyser_data import i18n
 from analyser_data.i18n_en import EN
 
 SOURCES = sorted((Path(__file__).resolve().parent.parent / "analyser_data").glob("*.py"))
-DISPLAY_LISTS = ("TIME_MODES", "EXPORT_STEPS", "PEAK_MODES", "APP_TITLE", "FILE_TYPES", "TOOLTIPS", "LINE_STYLES", "MARKERS", "AXIS_NAMES", "SCALES", "QUANTITY_NAMES", "LEGEND_POSITIONS", "SEPARATOR_CHOICES", "SEPARATOR_NAMES")
+DISPLAY_LISTS = ("TIME_MODES", "EXPORT_STEPS", "PEAK_MODES", "APP_TITLE", "FILE_TYPES", "TOOLTIPS", "LINE_STYLES", "MARKERS", "AXIS_NAMES", "SCALES", "QUANTITY_NAMES", "LEGEND_POSITIONS", "SEPARATOR_CHOICES", "SEPARATOR_NAMES", "AUTO_SHIFT")
 
 
 def translatable_strings():

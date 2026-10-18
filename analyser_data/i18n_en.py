@@ -398,4 +398,12 @@ EN = {
     'toutes les voies %HR': 'all %RH channels',
     'toutes les voies °C': 'all °C channels',
     '{} sonde(s) à part': '{} probe(s) set individually',
+    # Décalage dans le temps (issue #13)
+    "Aucun fichier d'enceinte reconnu : choisissez le fichier à décaler dans la liste.": 'No climatic chamber file recognised: choose the file to shift in the list.',
+    "Automatique (fichiers d'enceinte)": 'Automatic (chamber files)',
+    'Fichier décalé': 'Shifted file',
+    'Suivent le curseur : {} (toutes leurs colonnes)': 'Following the slider: {} (all their columns)',
+    'Décalage dans le temps : {}': 'Time shift: {}',
+    'Décalage dans le temps appliqué à : {}': 'Time shift applied to: {}',
+    'aucun fichier': 'no file',
 }
