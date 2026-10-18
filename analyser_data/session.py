@@ -4,6 +4,8 @@ Cette classe ne dépend pas de Tkinter : toute la logique métier est testable s
 """
 from __future__ import annotations
 
+import math
+from decimal import ROUND_HALF_UP, Decimal
 from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -20,7 +22,7 @@ from .export import Key, merge_selection, write_csv
 from .loader import TIME_COL, LoadError, Measurement, align_time_axes, load_measurement
 from .channels import TEMPERATURE, Channel
 from .plotting import PlotSeries
-from .i18n import _
+from .i18n import _, get_language
 
 
 # Bases de temps pour superposer plusieurs fichiers
@@ -41,6 +43,33 @@ EXPORT_STEPS = OrderedDict([
 ])
 
 
+# Correction de température (issue #11) : température affichée = mesurée + correction
+TEMPERATURE_OFFSET_RANGE = (-5.0, 5.0)  # °C
+TEMPERATURE_OFFSET_STEP = 0.1
+
+
+def parse_temperature_offset(text) -> float:
+    """« +0,5 » / « -1.2 » -> valeur arrondie au pas de 0,1 °C. ValueError (message lisible)
+    si le texte n'est pas un nombre ou sort de la plage autorisée."""
+    low, high = TEMPERATURE_OFFSET_RANGE
+    message = _("Correction de température invalide : « {} ». Saisissez une valeur entre {} et {} °C "
+                "(pas de 0,1 °C).").format(text, format_offset(low), format_offset(high))
+    try:
+        value = float(str(text).strip().replace(",", ".").replace("°C", "").replace("+", "") or 0)
+    except ValueError:
+        raise ValueError(message) from None
+    if not (math.isfinite(value) and low - 1e-9 <= value <= high + 1e-9):
+        raise ValueError(message)
+    # Arrondi décimal au dixième, 0,05 -> 0,1 (0,1 + 0,2 = 0,30000000000000004 -> 0,3) ; -0,0 -> 0,0
+    return float(Decimal(repr(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)) + 0.0
+
+
+def format_offset(value: float) -> str:
+    """+0,5 °C (virgule en français)."""
+    text = "{:+.1f}".format(value)
+    return text.replace(".", ",") if get_language() == "fr" else text
+
+
 class Session:
     def __init__(self) -> None:
         self.measurements: "OrderedDict[str, Measurement]" = OrderedDict()
@@ -52,6 +81,7 @@ class Session:
         self.export_step_s: Optional[float] = None
         self.noise_thresholds: Dict[Key, Optional[float]] = {}  # seuils de bruit réglés par voie
         self.offsets: Dict[Key, Optional[float]] = {}  # décalages de zéro réglés par voie
+        self.temperature_offset = 0.0  # correction ajoutée aux voies °C (affichage et exports)
         self.journal: List[Tuple[pd.Timestamp, str]] = []  # traçabilité des traitements
 
     # ------------------------------------------------------------------ journal
@@ -112,6 +142,9 @@ class Session:
                 _(" · du {} au {}").format(m.start.strftime("%d/%m/%Y %H:%M:%S"), end.strftime("%d/%m/%Y %H:%M:%S"))
                 if end is not None else "",
                 ", ".join(ch.label for ch in m.channels)))
+            if self.temperature_offset and any(ch.quantity == TEMPERATURE for ch in m.channels):
+                self.log(_("Correction de température : {} °C (température affichée = mesurée + correction)")
+                         .format(format_offset(self.temperature_offset)))
         self._realign()
 
     def remove_file(self, name: str) -> None:
@@ -300,7 +333,7 @@ class Session:
             m = self.measurements[name]
             ch = m.channel(label)
             x = m.data[TIME_COL].to_numpy(dtype=float)
-            y = m.data[label].to_numpy(dtype=float)
+            y = self.displayed_values((name, label))
             first = 0
             if self.window is not None:  # période commune : on ne garde que la fenêtre
                 first = int(np.searchsorted(x, self.window[0] - 1e-9))
@@ -310,7 +343,9 @@ class Session:
                 PlotSeries(
                     gid=str(i),
                     label=legend_label(ch, temperatures.index((name, label)) + 1 if len(temperatures) > 1
-                                       and (name, label) in temperatures else 0),
+                                       and (name, label) in temperatures else 0)
+                    + (" ({} °C)".format(format_offset(self.temperature_offset))
+                       if ch.quantity == TEMPERATURE and self.temperature_offset else ""),
                     x=x,
                     y=y,
                     unit=ch.unit,
@@ -323,11 +358,33 @@ class Session:
                 )
             )
             if with_raw and self.modified_points((name, label)):
-                raw = self.raw_values((name, label))[first:first + len(x)]
+                raw = self.raw_values((name, label))[first:first + len(x)] + self.value_offset((name, label))
                 out.append(PlotSeries(gid=_("raw:{}").format(i), label=_("_brut"), x=x, y=raw, unit=ch.unit,
                                       quantity=ch.quantity, shiftable=out[-1].shiftable, index_base=first, raw=True,
                                       key=(name, label)))
         return out
+
+    # ------------------------------------------------------- correction de température
+
+    def set_temperature_offset(self, value: float) -> None:
+        """Correction ajoutée à toutes les voies °C à l'affichage et aux exports ; les données
+        mesurées ne sont pas modifiées (la correction peut être changée ou retirée)."""
+        value = parse_temperature_offset(value)
+        if value == self.temperature_offset:
+            return
+        self.temperature_offset = value
+        if self.measurements:
+            self.log(_("Correction de température : {} °C (température affichée = mesurée + correction)").format(
+                format_offset(value)))
+
+    def value_offset(self, key: Key) -> float:
+        """Correction à ajouter aux valeurs de la voie (température seulement)."""
+        ch = self.measurements[key[0]].channel(key[1])
+        return self.temperature_offset if ch.quantity == TEMPERATURE else 0.0
+
+    def displayed_values(self, key: Key) -> np.ndarray:
+        """Valeurs telles qu'affichées et exportées (correction de température comprise)."""
+        return self.measurements[key[0]].data[key[1]].to_numpy(dtype=float) + self.value_offset(key)
 
     # ------------------------------------------------------------------- export
 
@@ -340,12 +397,15 @@ class Session:
         df = merge_selection(
             list(self.measurements.values()), self.reference, keys, self.time_offset_min,
             window=self.window, step_s=self.export_step_s, percent=self.percent_axis,
+            value_offsets={key: self.value_offset(key) for key in keys},
         )
         if progress:
             progress(_("Écriture de {} lignes dans {}…").format(len(df), Path(path).name), 0.5)
         write_csv(df, path)
         self.log(_("Export CSV : {} ({} lignes × {} voies, base de temps : {}, grille : {})").format(
-            Path(path).name, len(df), len(keys), _(TIME_MODES[self.time_mode]), _(EXPORT_STEPS[self.export_step_s])))
+            Path(path).name, len(df), len(keys), _(TIME_MODES[self.time_mode]), _(EXPORT_STEPS[self.export_step_s]))
+            + (_(" ; correction de température {} °C incluse").format(format_offset(self.temperature_offset))
+               if self.temperature_offset and any(self.value_offset(k) for k in keys) else ""))
         journal_path(path).write_text(self.journal_text(), encoding="utf-8")
         return df
 

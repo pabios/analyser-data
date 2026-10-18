@@ -282,6 +282,24 @@ def main():
     print("import Excel : OK —", gui.status.get())
     shot(root, "20_excel_importe.png")
 
+    # Correction de température (issue #11) : +0,5 °C, valeur hors plage refusée, mémorisée
+    from analyser_data.i18n import get_setting
+    gui.temp_offset_var.set("0,5")
+    gui._on_temperature_offset()
+    pump(root)
+    temps = [l for a in gui.figure.axes for l in a.get_lines() if l.get_label().startswith("Température ambiante")]
+    assert temps and temps[0].get_label() == "Température ambiante (+0,5 °C)", [l.get_label() for l in temps]
+    assert get_setting("temperature_offset") == 0.5
+    errors_before = len([d for d in dialogs if d[0] == "error"])
+    gui.temp_offset_var.set("7")
+    gui._on_temperature_offset()
+    assert len([d for d in dialogs if d[0] == "error"]) == errors_before + 1
+    assert gui.temp_offset_var.get() == "+0,5" and gui.session.temperature_offset == 0.5
+    shot(root, "21_correction_temperature.png")
+    gui.temp_offset_var.set("0")
+    gui._on_temperature_offset()
+    print("correction de température : OK")
+
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
     shot_window(help_window, "12_aide.png")
     help_window.destroy()

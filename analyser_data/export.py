@@ -30,12 +30,14 @@ def merge_selection(
     window: Optional[Tuple[float, float]] = None,
     step_s: Optional[float] = None,
     percent: bool = False,
+    value_offsets: Optional[Dict[Key, float]] = None,
 ) -> pd.DataFrame:
     """Table unique : temps, puis une colonne par voie sélectionnée.
 
     * ``window`` : (début, fin) en minutes — seule cette période est exportée ;
     * ``step_s`` : grille de temps commune (ex. 1 s) au lieu de celle de la référence ;
     * ``percent`` : axe du temps en % de la durée de chaque fichier (mode « étiré »).
+    * ``value_offsets`` : correction ajoutée aux valeurs d'une voie (température, issue #11).
     """
     if not keys:
         raise ValueError(_("Aucune voie sélectionnée."))
@@ -66,6 +68,9 @@ def merge_selection(
         part = m.data[[TIME_COL] + labels].copy()
         if shifted:
             part[TIME_COL] = part[TIME_COL] + shift
+        for label in labels:
+            if (value_offsets or {}).get((name, label)):
+                part[label] = part[label] + value_offsets[(name, label)]
         part = part.rename(columns={c: _column_name(name, c, several_files) for c in labels})
         if m is reference and not shifted and step_s is None and window is None:
             for c in part.columns[1:]:

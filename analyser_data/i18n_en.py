@@ -373,4 +373,15 @@ EN = {
     '« , »': '“,”',
     'tabulation': 'tab',
     'espaces': 'spaces',
+    # Correction de température (issue #11)
+    ' ; correction de température {} °C incluse': '; temperature correction {} °C included',
+    'Active : température affichée = mesurée {} °C': 'Active: displayed temperature = measured {} °C',
+    'Aucune correction (0,0 °C)': 'No correction (0.0 °C)',
+    'Correction de température': 'Temperature correction',
+    'Correction de température : {} °C (température affichée = mesurée + correction)': 'Temperature correction: {} °C (displayed temperature = measured + correction)',
+    'Correction de température : {} °C (affichée = mesurée + correction)': 'Temperature correction: {} °C (displayed = measured + correction)',
+    'Correction de température : {} °C appliquée aux voies °C (affichage et exports).': 'Temperature correction: {} °C applied to °C channels (display and exports).',
+    'Correction de température active : {} °C.': 'Temperature correction active: {} °C.',
+    'Correction de température invalide : « {} ». Saisissez une valeur entre {} et {} °C (pas de 0,1 °C).': 'Invalid temperature correction: “{}”. Enter a value between {} and {} °C (0.1 °C steps).',
+    "Retard de l'enceinte (décalage dans le temps des courbes °C / %HR) et correction de la température mesurée.": 'Chamber lag (time shift of the °C / %RH curves) and correction of the measured temperature.',
 }

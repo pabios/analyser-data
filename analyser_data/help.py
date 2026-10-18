@@ -165,7 +165,14 @@ Grille d'export : celle du fichier de référence, ou une grille commune (100 ms
 pour avoir une valeur de chaque appareil sur chaque ligne (mesure la plus proche).
 
 Décalage enceinte climatique : décale les courbes des fichiers ne contenant que des
-°C / %HR (nanodac) si l'enceinte réagit avec retard.""",
+°C / %HR (nanodac) si l'enceinte réagit avec retard.
+
+Correction de température (carte « Enceinte climatique ») : valeur de -5,0 à +5,0 °C, par
+pas de 0,1 °C, ajoutée à toutes les voies de température : température affichée =
+température mesurée + correction. Elle s'applique au graphique, à la légende
+(« Température ambiante (+0,5 °C) »), au CSV, à l'image et au rapport PDF, et elle est
+notée dans le journal. Les mesures d'origine ne sont jamais modifiées : remettez 0 pour
+les retrouver. La valeur est mémorisée d'un lancement à l'autre.""",
      "Time base", """\
 To overlay several files:
 • Real time: each measurement at its clock time (same test, devices on time).
@@ -178,7 +185,14 @@ Export grid: the reference file's grid, or a common grid (100 ms, 1 s…) to get
 value from each device on every row (nearest measurement).
 
 Climatic chamber shift: shifts the curves of files that only contain °C / %RH
-(nanodac) if the chamber lags."""),
+(nanodac) if the chamber lags.
+
+Temperature correction (“Climatic chamber” card): value from -5.0 to +5.0 °C, in 0.1 °C
+steps, added to every temperature channel: displayed temperature = measured
+temperature + correction. It applies to the chart, the legend (“Ambient temperature
+(+0.5 °C)”), the CSV, the image and the PDF report, and is recorded in the log. The
+original measurements are never changed: set 0 to get them back. The value is
+remembered between launches."""),
 
     ("Livrables pour le client", "Livrables pour le client", """\
 Menu « Exporter » :

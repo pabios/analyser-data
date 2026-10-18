@@ -37,9 +37,10 @@ from .loader import write_extract
 from .report import build_report, save_figure_image
 from .session import journal_path
 from .plotting import PlotManager, PlotSettings, format_hms
-from .session import EXPORT_STEPS, TIME_MODES, Session
+from .session import (EXPORT_STEPS, TEMPERATURE_OFFSET_RANGE, TEMPERATURE_OFFSET_STEP, TIME_MODES, Session,
+                      format_offset, parse_temperature_offset)
 from .theme import C, CheckImages, ScrollFrame, apply_theme, bordered, card, separator
-from .i18n import _, get_language, load_language, set_language
+from .i18n import _, get_language, get_setting, load_language, set_language, set_setting
 
 APP_TITLE = "Analyser DATA — MultiPlotter pour bancs d'essai"
 FILE_TYPES = [
@@ -62,6 +63,10 @@ class AnalyserDataApp:
         self._gid_key: Dict[str, Key] = {}  # gid de courbe -> voie
         self._key_color: Dict[Key, str] = {}  # voie -> couleur de sa courbe
         self.plot_settings = PlotSettings()  # axes et courbes réglés par l'utilisateur (gardés au redessin)
+        try:  # correction de température mémorisée (issue #11)
+            self.session.set_temperature_offset(get_setting("temperature_offset", 0.0))
+        except ValueError:
+            pass
         self._last_dir = str(EXAMPLES_DIR if EXAMPLES_DIR.is_dir() else Path.home())
         self.busy = False  # un traitement long tourne en arrière-plan
         self._action_buttons: List[ttk.Button] = []
@@ -76,7 +81,9 @@ class AnalyserDataApp:
         self.fonts = apply_theme(root)
         self.check_images = CheckImages(root)
         self._build_ui()
-        self._set_status(_("Prêt. Ouvrez un ou plusieurs fichiers de mesure."))
+        self._set_status(_("Prêt. Ouvrez un ou plusieurs fichiers de mesure.") + (
+            " " + _("Correction de température active : {} °C.").format(format_offset(self.session.temperature_offset))
+            if self.session.temperature_offset else ""))
 
     def _build_ui(self) -> None:
         self.root.title("{}  (v{})".format(_(APP_TITLE), __version__))
@@ -250,7 +257,8 @@ class AnalyserDataApp:
 
         # --- US-04 : décalage temporel des courbes climatiques
         outer, shift = card(side, _("Enceinte climatique"),
-                            _("Décale les courbes °C / %HR si l'enceinte réagit avec retard."))
+                            _("Retard de l'enceinte (décalage dans le temps des courbes °C / %HR) et "
+                              "correction de la température mesurée."))
         outer.pack(fill=tk.X, padx=(0, 12), pady=(0, 12))
         row = ttk.Frame(shift, style="Card.TFrame")
         row.pack(fill=tk.X)
@@ -262,6 +270,23 @@ class AnalyserDataApp:
         self.lbl_offset.pack(side=tk.LEFT, padx=(8, 6))
         ttk.Button(row, text="0", style="Icon.TButton", width=2,
                    command=lambda: self._set_offset(0.0)).pack(side=tk.LEFT)
+
+        # --- Issue #11 : correction de température (affichée = mesurée + correction)
+        row = ttk.Frame(shift, style="Card.TFrame")
+        row.pack(fill=tk.X, pady=(10, 0))
+        ttk.Label(row, text=_("Correction de température"), style="Card.TLabel").pack(side=tk.LEFT)
+        ttk.Label(row, text="°C", style="Card.TLabel").pack(side=tk.RIGHT, padx=(4, 0))
+        self.temp_offset_var = tk.StringVar(value=format_offset(self.session.temperature_offset))
+        low, high = TEMPERATURE_OFFSET_RANGE
+        self.temp_offset_box = ttk.Spinbox(row, from_=low, to=high, increment=TEMPERATURE_OFFSET_STEP, width=6,
+                                           textvariable=self.temp_offset_var, justify=tk.RIGHT,
+                                           command=self._on_temperature_offset)
+        self.temp_offset_box.pack(side=tk.RIGHT)
+        for event in ("<Return>", "<FocusOut>", "<KP_Enter>"):
+            self.temp_offset_box.bind(event, lambda _e: self._on_temperature_offset())
+        self.lbl_temp_offset = ttk.Label(shift, style="Muted.Card.TLabel")
+        self.lbl_temp_offset.pack(anchor=tk.W, pady=(2, 0))
+        self._show_temperature_offset()
 
         # --- US-05 : correction au clic
         outer, edit = card(side, _("Correction au clic"),
@@ -806,6 +831,33 @@ class AnalyserDataApp:
         self.session.time_offset_min = value
         self.plot.set_time_offset(value)
 
+    def _on_temperature_offset(self) -> None:
+        """Correction de température saisie : vérifiée, mémorisée, appliquée à l'affichage."""
+        text = self.temp_offset_var.get()
+        try:
+            value = parse_temperature_offset(text)
+        except ValueError as exc:
+            messagebox.showerror(_("Correction de température"), str(exc), parent=self.root)
+            self.temp_offset_var.set(format_offset(self.session.temperature_offset))
+            return
+        changed = value != self.session.temperature_offset
+        self.session.set_temperature_offset(value)
+        set_setting("temperature_offset", value)
+        self.temp_offset_var.set(format_offset(value))
+        self._show_temperature_offset()
+        if changed:
+            view = self.plot.current_view()
+            self._redraw_with_view(view)
+            self._set_status(_("Correction de température : {} °C appliquée aux voies °C (affichage et exports).")
+                             .format(format_offset(value)))
+
+    def _show_temperature_offset(self) -> None:
+        value = self.session.temperature_offset
+        self.lbl_temp_offset.configure(
+            text=_("Active : température affichée = mesurée {} °C").format(format_offset(value)) if value
+            else _("Aucune correction (0,0 °C)"),
+            foreground=C["fg"] if value else C["muted_fg"])
+
     def _set_offset(self, value: float) -> None:
         self.offset_var.set(value)
         self._on_offset()
@@ -821,8 +873,9 @@ class AnalyserDataApp:
             return
         index = self.plot.original_index(gid, plotted_index)
         value = self.session.correct_point(key, index)
-        self.plot.update_data(gid, self.session.measurements[key[0]].data[key[1]].to_numpy())
-        self._set_status(_("Point corrigé : {} [{}], indice {} → {:.6g}").format(key[1], key[0], index, value))
+        self.plot.update_data(gid, self.session.displayed_values(key))
+        self._set_status(_("Point corrigé : {} [{}], indice {} → {:.6g}").format(
+            key[1], key[0], index, value + self.session.value_offset(key)))
 
     def _set_status(self, text: str) -> None:
         self.status.set(text)
