@@ -33,7 +33,7 @@ from .editing import ClickCorrector
 from .export import Key
 from .help import HelpWindow
 from .import_dialog import ImportDialog, needs_dialog, preview_enabled
-from .corrections_dialog import ProbeCorrectionsDialog
+from .corrections_dialog import ProbeCorrectionsDialog, ShiftedChannelsDialog
 from .loader import write_extract
 from .report import build_report, save_figure_image
 from .session import journal_path
@@ -44,7 +44,6 @@ from .theme import C, CheckImages, ScrollFrame, apply_theme, bordered, card, sep
 from .i18n import _, get_language, get_setting, load_language, set_language, set_setting
 
 APP_TITLE = "Analyser DATA — MultiPlotter pour bancs d'essai"
-AUTO_SHIFT = "Automatique (fichiers d'enceinte)"
 FILE_TYPES = [
     ("Fichiers de mesure", "*.csv *.txt *.dat *.xlsx *.xlsm *.xls *.CSV *.TXT *.DAT *.XLSX *.XLS"),
     ("Texte (CSV, TXT, DAT)", "*.csv *.txt *.dat *.CSV *.TXT *.DAT"),
@@ -264,8 +263,8 @@ class AnalyserDataApp:
 
         # --- US-04 : décalage temporel des courbes climatiques
         outer, shift = card(side, _("Enceinte climatique"),
-                            _("Retard de l'enceinte (décalage dans le temps des courbes °C / %HR) et "
-                              "correction de la température mesurée."))
+                            _("Retard de l'enceinte (décalage dans le temps des voies choisies, °C par "
+                              "défaut) et correction des températures et humidités mesurées."))
         outer.pack(fill=tk.X, padx=(0, 12), pady=(0, 12))
         row = ttk.Frame(shift, style="Card.TFrame")
         row.pack(fill=tk.X)
@@ -277,16 +276,12 @@ class AnalyserDataApp:
         self.lbl_offset.pack(side=tk.LEFT, padx=(8, 6))
         ttk.Button(row, text="0", style="Icon.TButton", width=2,
                    command=lambda: self._set_offset(0.0)).pack(side=tk.LEFT)
-        # Fichier qui suit le curseur (issue #13) : automatique, ou choisi à la main
+        # Voies qui suivent le curseur (issue #13) : les °C par défaut, ou choisies à la main
         row = ttk.Frame(shift, style="Card.TFrame")
         row.pack(fill=tk.X, pady=(6, 0))
-        ttk.Label(row, text=_("Fichier décalé"), style="Card.TLabel").pack(side=tk.LEFT, padx=(0, 6))
-        self.shifted_var = tk.StringVar(value=_(AUTO_SHIFT))
-        self.shifted_box = ttk.Combobox(row, textvariable=self.shifted_var, state="readonly", width=26)
-        self.shifted_box.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.shifted_box.bind("<<ComboboxSelected>>", lambda _e: self._on_shifted_file())
-        self.lbl_shifted = ttk.Label(shift, style="Muted.Card.TLabel", wraplength=330, justify=tk.LEFT)
-        self.lbl_shifted.pack(anchor=tk.W, pady=(2, 0))
+        self.lbl_shifted = ttk.Label(row, style="Muted.Card.TLabel", wraplength=240, justify=tk.LEFT)
+        self.lbl_shifted.pack(side=tk.LEFT, anchor=tk.W)
+        ttk.Button(row, text=_("Voies décalées…"), command=self.edit_shifted_channels).pack(side=tk.RIGHT, anchor=tk.N)
 
         # --- Issue #11 : corrections de température / d'humidité (affichée = mesurée + correction)
         self.temp_offset_var = self._correction_row(shift, _("Correction de température"), "°C",
@@ -848,24 +843,28 @@ class AnalyserDataApp:
         self.plot.set_time_offset(value)
 
     def _update_shifted_choices(self) -> None:
-        """Liste « Fichier décalé » et rappel des fichiers qui suivent le curseur."""
-        names = list(self.session.measurements)
-        self.shifted_box.configure(values=[_(AUTO_SHIFT)] + names)
-        if self.session.shifted_file not in names:
-            self.session.shifted_file = None
-        self.shifted_var.set(self.session.shifted_file or _(AUTO_SHIFT))
-        shifted = [m.name for m in self.session.measurements.values() if self.session.is_shifted(m)]
+        """Rappel des voies qui suivent le curseur de décalage dans le temps."""
+        shifted = self.session.shifted_channels()
         if shifted:
-            text = _("Suivent le curseur : {} (toutes leurs colonnes)").format(", ".join(shifted))
-        elif names:
-            text = _("Aucun fichier d'enceinte reconnu : choisissez le fichier à décaler dans la liste.")
+            text = _("Suivent le curseur : {}").format(", ".join(label for _name, label in shifted[:6])
+                                                       + (" …" if len(shifted) > 6 else ""))
+        elif self.session.measurements:
+            text = _("Aucune voie ne suit le curseur : cliquez sur « Voies décalées… ».")
         else:
-            text = ""
+            text = _("Par défaut : les voies °C.")
+        if self.session.shifted_keys is None and shifted:
+            text += _(" (toutes les °C)")
         self.lbl_shifted.configure(text=text)
 
-    def _on_shifted_file(self) -> None:
-        choice = self.shifted_var.get()
-        self.session.set_shifted_file(None if choice == _(AUTO_SHIFT) else choice)
+    def edit_shifted_channels(self) -> None:
+        if self.session.measurements:
+            ShiftedChannelsDialog(self)
+        else:
+            messagebox.showinfo(_("Voies décalées"), _("Ouvrez d'abord des fichiers de mesure."), parent=self.root)
+
+    def apply_shifted_channels(self, keys) -> None:
+        """Voies choisies (None : toutes les °C) -> elles seules suivent le curseur."""
+        self.session.set_shifted_keys(keys)
         self._update_shifted_choices()
         self._redraw_with_view(self.plot.current_view())
         self._set_status(_("Décalage dans le temps : {}").format(self.lbl_shifted.cget("text")))

@@ -1,6 +1,9 @@
-"""Fenêtre « Corrections par sonde » (issue #11) : une correction propre à chaque voie °C / %HR.
+"""Fenêtres de la carte « Enceinte climatique » :
 
-Champ vide = la voie suit la correction générale de sa grandeur (carte Enceinte climatique).
+* « Corrections par sonde » (issue #11) : une correction propre à chaque voie °C / %HR ;
+* « Voies décalées » (issue #13) : les voies qui suivent le curseur de décalage dans le temps.
+
+Corrections : champ vide = la voie suit la correction générale de sa grandeur (carte Enceinte climatique).
 Valeur affichée = valeur mesurée + correction ; les mesures d'origine ne changent jamais.
 """
 from __future__ import annotations
@@ -91,3 +94,79 @@ class ProbeCorrectionsDialog(tk.Toplevel):
             return
         self.destroy()
         self.app.apply_probe_corrections(values)
+
+
+class ShiftedChannelsDialog(tk.Toplevel):
+    """Voies qui suivent le curseur de décalage dans le temps (issue #13) : cochées une à une.
+    Par défaut, les voies °C de tous les fichiers ; les autres restent à leur heure."""
+
+    def __init__(self, app):
+        super().__init__(app.root)
+        self.app = app
+        session = app.session
+        self.title(_("Voies décalées"))
+        self.transient(app.root)
+        self.configure(background=C["background"])
+
+        body = ttk.Frame(self, padding=16)
+        body.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(body, text=_("Voies décalées"), font=app.fonts.brand).pack(anchor=tk.W)
+        ttk.Label(body, text=_("Cochez les voies qui suivent le curseur « Enceinte climatique » "
+                               "(décalage dans le temps). Les autres restent à leur heure."),
+                  style="Muted.TLabel").pack(anchor=tk.W, pady=(0, 12))
+
+        outer, box = card(body)
+        outer.pack(fill=tk.BOTH, expand=True)
+        rows = sum(len(m.channels) + 1 for m in session.measurements.values())
+        canvas = tk.Canvas(box, highlightthickness=0, background=C["card"], height=min(26 * rows + 10, 420))
+        scroll = ttk.Scrollbar(box, orient=tk.VERTICAL, command=canvas.yview)
+        table = ttk.Frame(canvas, style="Card.TFrame")
+        table.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all"),
+                                                                width=table.winfo_reqwidth()))
+        canvas.create_window((0, 0), window=table, anchor=tk.NW)
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        if rows > 16:
+            scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.vars: Dict[Key, tk.BooleanVar] = {}
+        self.units: Dict[Key, str] = {}
+        row = 0
+        for m in session.measurements.values():
+            ttk.Label(table, text=m.name, style="Title.Card.TLabel").grid(row=row, column=0, columnspan=2,
+                                                                         sticky=tk.W, pady=(6, 2))
+            row += 1
+            for ch in m.channels:
+                key = (m.name, ch.label)
+                var = tk.BooleanVar(value=session.is_key_shifted(key))
+                ttk.Checkbutton(table, text=ch.label, variable=var, style="Card.TCheckbutton").grid(
+                    row=row, column=0, sticky=tk.W, padx=(12, 6))
+                ttk.Label(table, text=ch.unit or "—", style="Muted.Card.TLabel").grid(row=row, column=1, sticky=tk.W)
+                self.vars[key] = var
+                self.units[key] = ch.quantity
+                row += 1
+
+        buttons = ttk.Frame(body)
+        buttons.pack(fill=tk.X, pady=(12, 0))
+        ttk.Button(buttons, text=_("Toutes les °C"), command=self.select_temperatures).pack(side=tk.LEFT)
+        ttk.Button(buttons, text=_("Aucune"), command=lambda: [v.set(False) for v in self.vars.values()]).pack(
+            side=tk.LEFT, padx=6)
+        ttk.Button(buttons, text=_("Appliquer"), style="Primary.TButton", command=self.apply).pack(side=tk.RIGHT)
+        ttk.Button(buttons, text=_("Annuler"), command=self.destroy).pack(side=tk.RIGHT, padx=6)
+        self.bind("<Return>", lambda _e: self.apply())
+        self.bind("<Escape>", lambda _e: self.destroy())
+
+    def select_temperatures(self) -> None:
+        for key, var in self.vars.items():
+            var.set(self.units[key] == TEMPERATURE)
+
+    def chosen(self):
+        """Voies cochées ; None si c'est exactement le réglage par défaut (toutes les °C)."""
+        keys = {key for key, var in self.vars.items() if var.get()}
+        default = {key for key, quantity in self.units.items() if quantity == TEMPERATURE}
+        return None if keys == default else keys
+
+    def apply(self) -> None:
+        keys = self.chosen()
+        self.destroy()
+        self.app.apply_shifted_channels(keys)

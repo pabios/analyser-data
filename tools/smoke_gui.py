@@ -299,21 +299,25 @@ def main():
     assert gui.temp_offset_var.get() == "+0,5" and gui.session.temperature_offset == 0.5
     shot(root, "21_correction_temperature.png")
     gui.sidebar.canvas.yview_moveto(1.0)  # carte « Enceinte climatique », en bas de la colonne
-    # Issue #13 : fichier décalé choisi à la main -> toutes ses colonnes suivent le curseur
-    excel_name = next(n for n, m in gui.session.measurements.items() if m.sheet)
-    gui.shifted_var.set(excel_name)
-    gui._on_shifted_file()
+    # Issue #13 : par défaut seules les voies °C suivent le curseur ; choix à la main d'une voie
+    from analyser_data.corrections_dialog import ShiftedChannelsDialog
     gui._set_offset(-4.0)
     pump(root)
-    assert excel_name in gui.lbl_shifted.cget("text")
-    shifted = [t for t in gui.plot._traces.values() if t.shiftable]
-    assert len(shifted) == len(gui.session.measurements[excel_name].channels), len(shifted)
-    excel_t0 = gui.session.measurements[excel_name].data["Time_min"].iloc[0]
-    for t in shifted:  # point tracé = temps enregistré - 4 min, pour toutes ses colonnes
-        assert np.allclose(t.line.get_xdata() - t.x[t.index], -4.0), excel_t0
+    shifted = [t for t in gui.plot._traces.values() if t.shiftable and not t.line.get_gid().startswith("raw")]
+    assert all("Température" in t.line.get_label() for t in shifted) and shifted
+    chooser = ShiftedChannelsDialog(gui)
+    pump(root)
+    excel_name = next(n for n, m in gui.session.measurements.items() if m.sheet)
+    chooser.vars[(excel_name, "I_EOM (mA)")].set(True)
+    shot_window(chooser, "24_voies_decalees.png")
+    chooser.apply()
+    pump(root)
+    assert "I_EOM" in gui.lbl_shifted.cget("text")
+    for t in gui.plot._traces.values():  # point tracé = temps enregistré - 4 min pour les voies choisies
+        if t.shiftable:
+            assert np.allclose(t.line.get_xdata() - t.x[t.index], -4.0)
     shot(root, "23_carte_enceinte.png")
-    gui.shifted_var.set(gui.shifted_box.cget("values")[0])
-    gui._on_shifted_file()
+    gui.apply_shifted_channels(None)
     gui._set_offset(0.0)
     # Par sonde : la sonde du classeur Excel réglée à part (-0,3 °C), prioritaire sur +0,5 °C
     from analyser_data.corrections_dialog import ProbeCorrectionsDialog

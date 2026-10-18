@@ -31,7 +31,7 @@ def merge_selection(
     step_s: Optional[float] = None,
     percent: bool = False,
     value_offsets: Optional[Dict[Key, float]] = None,
-    shifted_files: Optional[set] = None,
+    shifted_keys: Optional[set] = None,
 ) -> pd.DataFrame:
     """Table unique : temps, puis une colonne par voie sélectionnée.
 
@@ -39,6 +39,8 @@ def merge_selection(
     * ``step_s`` : grille de temps commune (ex. 1 s) au lieu de celle de la référence ;
     * ``percent`` : axe du temps en % de la durée de chaque fichier (mode « étiré »).
     * ``value_offsets`` : correction ajoutée aux valeurs d'une voie (température, issue #11).
+    * ``shifted_keys`` : voies qui suivent le décalage dans le temps (issue #13) ; par défaut,
+      toutes les voies des fichiers d'enceinte.
     """
     if not keys:
         raise ValueError(_("Aucune voie sélectionnée."))
@@ -62,10 +64,19 @@ def merge_selection(
     base = pd.DataFrame({TIME_COL: grid})
     out = base.copy()
 
+    groups = []  # (fichier, voies, décalées ?) : les voies décalées d'un fichier sont fusionnées à part
     for name, labels in wanted.items():
         m = by_name[name]
-        # Les fichiers d'enceinte climatique sont décalés comme à l'écran
-        shifted = (name in shifted_files if shifted_files is not None else m.is_thermal) and shift != 0.0
+        is_shifted = (lambda label, n=name, m=m: (n, label) in shifted_keys) if shifted_keys is not None \
+            else (lambda label, m=m: m.is_thermal)
+        for flag in (False, True):
+            chosen = [label for label in labels if bool(is_shifted(label)) == flag]
+            if chosen:
+                groups.append((name, chosen, flag and shift != 0.0))
+
+    for name, labels, shifted in groups:
+        m = by_name[name]
+        # Les voies décalées le sont comme à l'écran
         part = m.data[[TIME_COL] + labels].copy()
         if shifted:
             part[TIME_COL] = part[TIME_COL] + shift
@@ -89,6 +100,8 @@ def merge_selection(
         for c in part.columns[1:]:
             out[c] = merged[c].to_numpy()
 
+    # Colonnes dans l'ordre des voies choisies (les voies décalées ont été fusionnées à part)
+    out = out[[TIME_COL] + [_column_name(n, label, several_files) for n, labels in wanted.items() for label in labels]]
     if percent:
         return out.rename(columns={TIME_COL: PERCENT_COL})
     out.insert(1, _("Temps (H:MM:SS)"), hms_column(out[TIME_COL].to_numpy()))

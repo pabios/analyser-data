@@ -164,10 +164,10 @@ Pour superposer plusieurs fichiers :
 Grille d'export : celle du fichier de référence, ou une grille commune (100 ms, 1 s…)
 pour avoir une valeur de chaque appareil sur chaque ligne (mesure la plus proche).
 
-Décalage enceinte climatique : décale dans le temps toutes les colonnes du fichier
-d'enceinte (nanodac…) si l'enceinte réagit avec retard. Fichier reconnu automatiquement :
-des voies °C / %HR et aucune voie électrique (consigne, sortie de régulation… acceptées).
-Sinon, choisissez-le dans la liste « Fichier décalé ».
+Décalage enceinte climatique : décale dans le temps les voies de température si
+l'enceinte réagit avec retard. Par défaut, toutes les voies °C (quel que soit leur
+fichier) suivent le curseur ; les autres restent à leur heure. « Voies décalées… » :
+cochez vous-même les voies à décaler (« Toutes les °C », « Aucune »).
 
 Corrections de température et d'humidité (carte « Enceinte climatique ») : valeur de
 -5,0 à +5,0 (°C ou %HR), par pas de 0,1, ajoutée aux voies de la grandeur : valeur
@@ -188,10 +188,10 @@ To overlay several files:
 Export grid: the reference file's grid, or a common grid (100 ms, 1 s…) to get one
 value from each device on every row (nearest measurement).
 
-Climatic chamber shift: shifts in time all the columns of the chamber file (nanodac…)
-if the chamber lags. File recognised automatically: °C / %RH channels and no electrical
-channel (setpoint, controller output… accepted). Otherwise, choose it in the “Shifted
-file” list.
+Climatic chamber shift: shifts the temperature channels in time if the chamber lags.
+By default, every °C channel (whatever its file) follows the slider; the others keep
+their time. “Shifted channels…”: tick the channels to shift yourself (“All °C”,
+“None”).
 
 Temperature and humidity corrections (“Climatic chamber” card): value from -5.0 to
 +5.0 (°C or %RH), in 0.1 steps, added to the channels of that quantity: displayed value
