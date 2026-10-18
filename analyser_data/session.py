@@ -21,7 +21,8 @@ from .editing import interpolate_at
 from .export import Key, merge_selection, write_csv
 from .loader import TIME_COL, LoadError, Measurement, align_time_axes, load_measurement
 from .channels import HUMIDITY, TEMPERATURE, Channel
-from .plotting import PlotSeries
+from .cycles import Cycle, Edit, assemble, assemble_time, detect_cycles, fundamental, plan, spectral_f0, synthetic_mask
+from .plotting import PlotSeries, format_hms
 from .i18n import _, get_language
 
 
@@ -89,6 +90,10 @@ class Session:
         self.humidity_offset = 0.0
         self.channel_offsets: Dict[Key, float] = {}
         self.journal: List[Tuple[pd.Timestamp, str]] = []  # traçabilité des traitements
+        # Cycles ajoutés / retirés (issue #12) : points non mesurés et états précédents (annulation)
+        self.synthetic: Dict[str, np.ndarray] = {}
+        self._cycle_undo: Dict[str, List[tuple]] = {}
+        self._cycle_order: List[str] = []  # fichiers modifiés, du plus ancien au plus récent
 
     # ------------------------------------------------------------------ journal
 
@@ -155,12 +160,17 @@ class Session:
     def remove_file(self, name: str) -> None:
         self.measurements.pop(name, None)
         self._raw.pop(name, None)
+        self.synthetic.pop(name, None)
+        self._cycle_undo.pop(name, None)
         self._realign()
 
     def clear(self) -> None:
         """Réinitialisation complète : décharge tous les fichiers."""
         self.measurements.clear()
         self._raw.clear()
+        self.synthetic.clear()
+        self._cycle_undo.clear()
+        self._cycle_order.clear()
         self.reference = None
         self.time_offset_min = 0.0
         self.shifted_keys = None
@@ -369,6 +379,143 @@ class Session:
                                       key=(name, label)))
         return out
 
+    # ------------------------------------------------------- cycles (issue #12)
+
+    def detect_cycles(self, key: Key) -> List[Cycle]:
+        """Cycles complets de la voie de référence (données actuelles, nettoyage compris)."""
+        return detect_cycles(self.measurements[key[0]].data[key[1]].to_numpy(dtype=float))
+
+    def preview_cycle_edit(self, key: Key, edit: Edit) -> dict:
+        """Résultat d'une modification de cycles sur la voie de référence, sans rien changer :
+        signal avant / après, jonctions, fréquence fondamentale avant / après."""
+        m = self.measurements[key[0]]
+        y = m.data[key[1]].to_numpy(dtype=float)
+        cycles = self.detect_cycles(key)
+        pieces = plan(cycles, edit, len(y))
+        after = assemble(y, pieces)
+        step_s = m.period_s
+        junctions, total = [], 0
+        for a, b in pieces[:-1]:
+            total += b - a
+            junctions.append(total)
+        cycles_after = detect_cycles(after)
+        return {
+            "before": y, "after": after, "step_s": step_s, "junctions": junctions,
+            "cycles_before": cycles, "cycles_after": cycles_after,
+            "f0_before": spectral_f0(y, step_s) or fundamental(cycles, step_s),
+            "f0_after": spectral_f0(after, step_s) or fundamental(cycles_after, step_s),
+            "period_before": fundamental(cycles, step_s), "period_after": fundamental(cycles_after, step_s),
+            "added_points": int(synthetic_mask(pieces, edit).sum()),
+            "removed_points": max(0, len(y) - len(after)),
+        }
+
+    def apply_cycle_edit(self, key: Key, edit: Edit) -> int:
+        """Retire ou duplique des cycles sur TOUTES les voies du fichier, aux mêmes points (coupes
+        au début exact d'un cycle de la voie de référence), temps continu. Renvoie le nombre de
+        points ajoutés (> 0) ou retirés (< 0). Annulable (``undo_cycle_edit``)."""
+        name, label = key
+        m = self.measurements[name]
+        n = len(m.data)
+        cycles = self.detect_cycles(key)
+        pieces = plan(cycles, edit, n)
+        self._cycle_undo.setdefault(name, []).append(
+            (m.data.copy(), self._raw[name].copy(), m.elapsed_min.copy(), self.synthetic.get(name)))
+        step = (m.period_s if np.isfinite(m.period_s) and m.period_s > 0 else 1.0) / 60.0
+        data, raw = {}, {}
+        for col in m.data.columns:
+            if col == TIME_COL:
+                continue
+            data[col] = assemble(m.data[col].to_numpy(dtype=float), pieces)
+            raw[col] = assemble(self._raw[name][col].to_numpy(dtype=float), pieces)
+        elapsed = assemble_time(m.elapsed_min, pieces, step)
+        # Points non mesurés : ceux déjà ajoutés auparavant, plus les cycles dupliqués maintenant
+        previous = self.synthetic.get(name, np.zeros(n, dtype=bool))
+        mask = np.concatenate([previous[a:b] for a, b in pieces]) | synthetic_mask(pieces, edit)
+        m.data = pd.DataFrame({TIME_COL: elapsed, **data})
+        self._raw[name] = pd.DataFrame({TIME_COL: elapsed, **raw})
+        m.elapsed_min = elapsed
+        self.synthetic[name] = mask
+        delta = len(elapsed) - n
+        if edit.kind == "remove":
+            text = _("Cycles {} à {} retirés de {} (voie de référence {}) : {} points, temps continu").format(
+                edit.first, edit.last, name, label, -delta)
+        else:
+            text = _("Cycle {} dupliqué {} fois dans {} après le cycle {} (voie de référence {}) : {} points "
+                     "AJOUTÉS, NON MESURÉS").format(edit.source, edit.count, name, edit.after, label, delta)
+        self.log(text)
+        self._cycle_order.append(name)
+        self._realign()
+        return delta
+
+    def undo_cycle_edit(self, name: str) -> bool:
+        """Annule la dernière modification de cycles du fichier."""
+        stack = self._cycle_undo.get(name)
+        if not stack:
+            return False
+        m = self.measurements[name]
+        m.data, self._raw[name], m.elapsed_min, mask = stack.pop()
+        if name in self._cycle_order:
+            del self._cycle_order[len(self._cycle_order) - 1 - self._cycle_order[::-1].index(name)]
+        if mask is None:
+            self.synthetic.pop(name, None)
+        else:
+            self.synthetic[name] = mask
+        self.log(_("Modification de cycles annulée : {}").format(name))
+        self._realign()
+        return True
+
+    def undo_last_cycle_edit(self) -> Optional[str]:
+        """Annule la modification de cycles la plus récente (tous fichiers). Renvoie le fichier."""
+        while self._cycle_order:
+            name = self._cycle_order[-1]
+            if self.undo_cycle_edit(name):
+                return name
+            self._cycle_order.pop()
+        return None
+
+    def can_undo_cycles(self) -> List[str]:
+        return [name for name, stack in self._cycle_undo.items() if stack]
+
+    def synthetic_spans(self, names: Optional[Iterable[str]] = None) -> List[Tuple[float, float]]:
+        """Périodes non mesurées (cycles ajoutés), en minutes sur l'axe du graphique."""
+        spans = []
+        for name in (names if names is not None else self.synthetic):
+            mask = self.synthetic.get(name)
+            if mask is None or not mask.any() or name not in self.measurements:
+                continue
+            t = self.measurements[name].data[TIME_COL].to_numpy(dtype=float)
+            edges = np.flatnonzero(np.diff(np.r_[0, mask.astype(np.int8), 0]))
+            for a, b in zip(edges[::2], edges[1::2]):
+                spans.append((float(t[a]), float(t[b - 1])))
+        return spans
+
+    def _flag_synthetic(self, df: pd.DataFrame, keys: Sequence[Key]) -> pd.DataFrame:
+        """Colonne « Cycle ajouté (non mesuré) » (1 / 0) si des cycles dupliqués sont exportés."""
+        names = {k[0] for k in keys if k[0] in self.synthetic and self.synthetic[k[0]].any()}
+        if not names or TIME_COL not in df.columns:
+            return df
+        flag = np.zeros(len(df), dtype=bool)
+        base = pd.DataFrame({TIME_COL: df[TIME_COL].to_numpy(dtype=float)})
+        for name in names:
+            m = self.measurements[name]
+            part = pd.DataFrame({TIME_COL: m.data[TIME_COL].to_numpy(dtype=float), "f": self.synthetic[name]})
+            merged = pd.merge_asof(base, part.sort_values(TIME_COL), on=TIME_COL, direction="nearest",
+                                   tolerance=m.period_s / 60.0 if np.isfinite(m.period_s) else None)
+            flag |= merged["f"].fillna(False).to_numpy(dtype=bool)
+        df = df.copy()
+        df[_("Cycle ajouté (non mesuré)")] = flag.astype(int)
+        return df
+
+    def synthetic_summary(self, names: Optional[Iterable[str]] = None) -> List[str]:
+        lines = []
+        for name in (names if names is not None else list(self.synthetic)):
+            mask = self.synthetic.get(name)
+            if mask is not None and mask.any():
+                m = self.measurements[name]
+                lines.append(_("{} : {} points ajoutés par duplication de cycles (NON MESURÉS, {} de données)").format(
+                    name, int(mask.sum()), format_hms(mask.sum() * m.period_s / 60.0)))
+        return lines
+
     # ------------------------------------------------------- décalage dans le temps
 
     def is_key_shifted(self, key: Key) -> bool:
@@ -479,6 +626,7 @@ class Session:
             value_offsets={key: self.value_offset(key) for key in keys},
             shifted_keys=set(self.shifted_channels()),
         )
+        df = self._flag_synthetic(df, keys)
         if progress:
             progress(_("Écriture de {} lignes dans {}…").format(len(df), Path(path).name), 0.5)
         write_csv(df, path)

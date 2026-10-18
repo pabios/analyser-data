@@ -148,6 +148,7 @@ def _summary_page(session, keys, view, title) -> Figure:
             or "—"))
     lines.append(_("Grille d'export : {}").format(_(EXPORT_STEPS[session.export_step_s])))
     lines += session.corrections_summary(keys)
+    lines += session.synthetic_summary({k[0] for k in keys})
     for line in lines:
         fig.text(0.05, y, line, fontsize=8.5, color=C["fg_soft"])
         y -= 0.022
@@ -184,7 +185,8 @@ def _plot_figure(session, keys, view, title, settings=None) -> Figure:
     plot.legend_pad = 2.0  # légende écartée du bord de la page A4
     plot.time_offset_min = session.time_offset_min
     plot.percent_axis = session.percent_axis
-    plot.draw(session.series(keys), title=title, settings=settings)
+    spans = [] if session.percent_axis else session.synthetic_spans({k[0] for k in keys})
+    plot.draw(session.series(keys), title=title, settings=settings, spans=spans)
     if view is not None and fig.axes:
         fig.axes[0].set_xlim(*view)
     # Mise en page automatique (comme à l'écran) : la légende reste hors des courbes (issue #6),

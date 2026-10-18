@@ -34,6 +34,7 @@ from .export import Key
 from .help import HelpWindow
 from .import_dialog import ImportDialog, needs_dialog, preview_enabled
 from .corrections_dialog import ProbeCorrectionsDialog, ShiftedChannelsDialog
+from .cycles_dialog import CyclesDialog
 from .loader import write_extract
 from .report import build_report, save_figure_image
 from .session import journal_path
@@ -242,6 +243,22 @@ class AnalyserDataApp:
             button = ttk.Button(row, text=text, command=command, style=style)
             button.pack(side=tk.LEFT, padx=(0, 6))
             self._action_buttons.append(button)
+
+        # --- Issue #12 : essai plus long (cycles dupliqués / retirés)
+        outer, cyc = card(side, _("Cycles"), _("Essai plus long : dupliquer ou retirer des cycles entiers."),
+                          actions=lambda header: ttk.Button(header, text="?", style="Icon.TButton", width=2,
+                                                            command=lambda: HelpWindow.open(self.root, "Cycles")
+                                                            ).pack())
+        outer.pack(fill=tk.X, padx=(0, 12), pady=(0, 12))
+        row = ttk.Frame(cyc, style="Card.TFrame")
+        row.pack(fill=tk.X)
+        button = ttk.Button(row, text=_("Cycles…"), style="Primary.TButton", command=self.open_cycles)
+        button.pack(side=tk.LEFT)
+        self._action_buttons.append(button)
+        self.btn_undo_cycles = ttk.Button(row, text=_("Annuler la modification"), command=self.undo_cycles)
+        self.btn_undo_cycles.pack(side=tk.LEFT, padx=(6, 0))
+        self.lbl_cycles = ttk.Label(cyc, style="Muted.Card.TLabel", wraplength=330, justify=tk.LEFT)
+        self.lbl_cycles.pack(anchor=tk.W, pady=(6, 0))
 
         # --- Superposition de fichiers : base de temps et grille d'export
         outer, base = card(side, _("Base de temps"), _("Comment superposer plusieurs fichiers."),
@@ -525,6 +542,41 @@ class AnalyserDataApp:
             lambda progress: self.session.apply_cleaning(keys, options, thresholds, offsets, progress), done,
         )
 
+    def open_cycles(self) -> None:
+        keys = self.selected_keys()
+        if not keys:
+            messagebox.showinfo(_("Cycles"), _("Cochez au moins une voie."), parent=self.root)
+            return
+        if not self.busy:
+            CyclesDialog(self, keys)
+
+    def apply_cycle_edit(self, key, edit) -> None:
+        """Duplique / retire des cycles sur toutes les voies du fichier (en arrière-plan)."""
+
+        def done(delta):
+            self._rebuild_tree()
+            self.redraw()
+            self._update_cycles_label()
+            self._set_status((_("{} points ajoutés (NON MESURÉS, hachurés) dans {}.") if delta > 0
+                              else _("{} points retirés de {}.")).format(abs(delta), key[0]))
+
+        self.run_in_background(_("Modification des cycles de {}…").format(key[0]),
+                               lambda progress: self.session.apply_cycle_edit(key, edit), done)
+
+    def undo_cycles(self) -> None:
+        name = self.session.undo_last_cycle_edit()
+        if name:
+            self._rebuild_tree()
+            self.redraw()
+            self._set_status(_("Modification de cycles annulée : {}").format(name))
+        self._update_cycles_label()
+
+    def _update_cycles_label(self) -> None:
+        lines = self.session.synthetic_summary()
+        self.lbl_cycles.configure(text="\n".join(lines) or _("Aucun cycle ajouté."),
+                                  foreground=C["fg"] if lines else C["muted_fg"])
+        self.btn_undo_cycles.state(["!disabled"] if self.session.can_undo_cycles() else ["disabled"])
+
     def restore_selected(self) -> None:
         keys = self.selected_keys()
         if keys and not self.busy:
@@ -739,7 +791,8 @@ class AnalyserDataApp:
         self._gid_key = {s.gid: key for s, key in zip([s for s in series if not s.raw], keys)}
         self.plot.time_offset_min = self.session.time_offset_min
         self.plot.percent_axis = self.session.percent_axis
-        self.plot.draw(series, settings=self.plot_settings)
+        spans = [] if self.session.percent_axis else self.session.synthetic_spans({k[0] for k in keys})
+        self.plot.draw(series, settings=self.plot_settings, spans=spans)
         self._key_color = {self._gid_key[gid]: color for gid, color in self.plot.colors.items()}
         self._refresh_checkmarks()
         self._update_empty_state()
@@ -765,6 +818,7 @@ class AnalyserDataApp:
         self._update_window_label()
         self._show_temperature_offset()  # « N sonde(s) à part » selon les fichiers ouverts
         self._update_shifted_choices()
+        self._update_cycles_label()
         if abs(self.offset_var.get() - self.session.time_offset_min) > 1e-9:  # curseur = session
             self._set_offset(self.session.time_offset_min)
 

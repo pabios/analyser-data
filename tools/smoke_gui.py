@@ -337,6 +337,38 @@ def main():
     assert gui.session.value_offset(probe) == 0.0
     print("correction de température : OK")
 
+    # Cycles (issue #12) : dupliquer 2 fois le cycle 2 à la fin de l'essai, aperçu, appliquer, annuler
+    from analyser_data.cycles_dialog import CyclesDialog
+    gui.session.clear()
+    gui._checked.clear()
+    gui.open_files(EXAMPLES[:1])
+    wait_idle(root, gui)
+    gl = next(iter(gui.session.measurements))
+    for k in gui._checked:
+        gui._checked[k] = k[1] in ("Channel 7", "Channel 3")
+    gui._refresh_checkmarks()
+    gui.redraw()
+    cycles = CyclesDialog(gui, gui.selected_keys())
+    pump(root)
+    assert cycles.key == (gl, "Channel 7") and len(cycles.cycles) == 3
+    cycles.source.set("2")
+    cycles.count.set("2")
+    cycles.update_preview()
+    pump(root)
+    assert "✓" in cycles.check.get(), cycles.check.get()
+    shot_window(cycles, "25_cycles.png")
+    cycles.apply()
+    wait_idle(root, gui)
+    n = len(gui.session.measurements[gl].data)
+    assert n > 24000 and gui.session.synthetic[gl].sum() == n - 24000
+    assert "NON MESURÉS" in gui.lbl_cycles.cget("text")
+    gui.plot.axes["main"].set_xlim(-2, 65)
+    gui.canvas.draw()
+    shot(root, "26_cycles_ajoutes.png")
+    gui.undo_cycles()
+    assert len(gui.session.measurements[gl].data) == 24000
+    print("cycles : OK")
+
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
     shot_window(help_window, "12_aide.png")
     help_window.destroy()

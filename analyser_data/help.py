@@ -153,6 +153,39 @@ columns when there are many channels), at the top or bottom (“Legend” list o
 tab); the “Legend” toolbar button hides or shows it. The “Home” button restores automatic limits (titles, labels and colours
 are kept); “Reset all to default” clears everything."""),
 
+    ("Cycles", "Cycles — essai plus long", """\
+Carte « Cycles » → « Cycles… » : rallonger ou raccourcir un essai en dupliquant ou en
+retirant des cycles entiers.
+• Voie de référence : la voie qui définit les cycles (le courant de cyclage en général).
+  Les cycles sont détectés et numérotés (début, durée, min, max) ; les pics parasites
+  ne créent pas de faux cycles.
+• « Dupliquer le cycle N, k fois, insérés après le cycle M » (0 = au début) ou
+  « Retirer les cycles N1 à N2 ».
+• Toutes les voies du fichier sont coupées / complétées aux mêmes points, au début exact
+  d'un cycle : la forme d'onde est conservée et le temps reste continu. Une dérive de
+  niveau au raccord est compensée en douceur, sans toucher au front.
+• Aperçu avant d'appliquer : signal avant / après (raccords en pointillés) et spectre
+  FFT avant / après ; la fréquence fondamentale f0 doit rester la même (✓).
+• Les cycles AJOUTÉS NE SONT PAS DES MESURES : ils sont hachurés sur le graphique, notés
+  dans le journal, marqués dans le CSV (colonne « Cycle ajouté (non mesuré) » = 1) et
+  signalés dans le rapport PDF. « Annuler la modification » revient en arrière.""",
+     "Cycles — longer test", """\
+“Cycles” card → “Cycles…”: lengthen or shorten a test by duplicating or removing whole
+cycles.
+• Reference channel: the channel that defines the cycles (usually the cycling current).
+  Cycles are detected and numbered (start, duration, min, max); spurious spikes do not
+  create false cycles.
+• “Duplicate cycle N, k times, inserted after cycle M” (0 = at the start) or “Remove
+  cycles N1 to N2”.
+• Every channel of the file is cut / extended at the same points, at the exact start of a
+  cycle: the waveform is kept and time stays continuous. A level drift at the joint is
+  smoothly compensated without touching the edge.
+• Preview before applying: signal before / after (joints dotted) and FFT spectrum before
+  / after; the fundamental frequency f0 must stay the same (✓).
+• ADDED cycles ARE NOT MEASUREMENTS: they are hatched on the chart, recorded in the log,
+  flagged in the CSV (“Added cycle (not measured)” column = 1) and reported in the PDF
+  report. “Undo the change” goes back."""),
+
     ("Base de temps", "Base de temps", """\
 Pour superposer plusieurs fichiers :
 • Heure réelle : chaque mesure à son heure (même essai, appareils à l'heure).

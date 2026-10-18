@@ -253,7 +253,9 @@ class PlotManager:
         self.colors: Dict[str, str] = {}  # gid -> couleur de la courbe
         self.draw([])
 
-    def draw(self, series: Sequence[PlotSeries], title: str = "", settings: Optional[PlotSettings] = None) -> None:
+    def draw(self, series: Sequence[PlotSeries], title: str = "", settings: Optional[PlotSettings] = None,
+             spans: Sequence[Tuple[float, float]] = ()) -> None:
+        """``spans`` : périodes NON MESURÉES (cycles ajoutés, issue #12), hachurées."""
         fig = self.figure
         fig.clear()
         _auto_layout(fig)
@@ -360,6 +362,14 @@ class PlotManager:
         self.axes = axes
         self._apply_axis_settings(settings)
 
+        if spans:
+            from matplotlib.patches import Patch
+
+            for x0, x1 in spans:
+                ax.axvspan(x0, x1, facecolor="#f59e0b", alpha=0.12, hatch="///", edgecolor="#d97706",
+                           linewidth=0, zorder=0)
+            handles.append(Patch(facecolor="#f59e0b", alpha=0.25, hatch="///", edgecolor="#d97706",
+                                 label=_("Cycles ajoutés (non mesurés)")))
         self._place_legend(ax, handles, settings.legend)
         if settings.x.min is not None or settings.x.max is not None:
             self._on_xlim_changed(ax)  # points de la période choisie
