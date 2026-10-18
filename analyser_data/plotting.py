@@ -263,6 +263,7 @@ class PlotManager:
         self.colors = {}
         self.axes = {}
         self.legend = None
+        self.main_quantity = None  # grandeur de l'axe principal quand il n'y a pas de voie électrique
         ax = fig.add_subplot(111)
         self._main_ax = ax
         settings = settings or PlotSettings()
@@ -274,19 +275,23 @@ class PlotManager:
 
         from .theme import C
 
+        # Sans voie électrique, la température (sinon l'humidité) passe sur l'axe principal
+        # au lieu d'un axe secondaire à droite d'un axe gauche vide (issue #14).
+        quantities = {s.quantity for s in series if not s.raw}
+        climatic_only = bool(quantities) and quantities <= {TEMPERATURE, HUMIDITY}
+        self.main_quantity = (TEMPERATURE if TEMPERATURE in quantities else HUMIDITY) if climatic_only else None
         axes = {MAIN_AXIS: ax}
-        if any(s.quantity == TEMPERATURE for s in series):
-            axes[TEMPERATURE] = ax.twinx()
-        if any(s.quantity == HUMIDITY for s in series):
-            axes[HUMIDITY] = ax.twinx()
-            if TEMPERATURE in axes:
-                axes[HUMIDITY].spines["right"].set_position(("axes", 1.09))
+        for quantity in (TEMPERATURE, HUMIDITY):
+            if quantity in quantities and quantity != self.main_quantity:
+                axes[quantity] = ax.twinx()
+        if TEMPERATURE in axes and HUMIDITY in axes:
+            axes[HUMIDITY].spines["right"].set_position(("axes", 1.09))
 
         handles = []
         main = [s for s in series if not s.raw]
         palette = _default_colors(main)
         for s in sorted(series, key=lambda s: not s.raw):  # le brut d'abord : dessous
-            target = axes.get(s.quantity, ax)
+            target = axes.get(s.quantity, ax)  # voie de l'axe principal (électrique, ou °C seule)
             if s.raw:
                 (line,) = target.plot([], [], color=C["border_strong"], linewidth=0.9, label=_("_brut"), gid=s.gid,
                                       zorder=1)
@@ -314,7 +319,7 @@ class PlotManager:
 
         if any(s.quantity not in (TEMPERATURE, HUMIDITY) for s in main):
             ax.set_ylabel(axis_title([s for s in main if s.quantity not in (TEMPERATURE, HUMIDITY)]))
-        else:
+        elif self.main_quantity is None:
             ax.set_yticks([])
         from .theme import HUMIDITY_COLOR, TEMPERATURE_COLOR
 
@@ -341,6 +346,13 @@ class PlotManager:
         ax.tick_params(axis="both", labelcolor=C["muted_fg"])
         ax.yaxis.label.set_color(C["fg_soft"])
         ax.xaxis.label.set_color(C["fg_soft"])
+        if self.main_quantity is not None:  # axe principal = température (ou humidité), à sa couleur
+            from .theme import HUMIDITY_COLOR as _HC, TEMPERATURE_COLOR as _TC
+
+            temperature = self.main_quantity == TEMPERATURE
+            color = first[self.main_quantity] or (_TC if temperature else _HC)
+            ax.set_ylabel(_("Température (°C)") if temperature else _("Humidité (%HR)"), color=color)
+            ax.tick_params(axis="y", labelcolor=color)
         for twin in list(axes.values())[1:]:
             twin.spines["left"].set_visible(False)
             twin.spines["bottom"].set_visible(False)
