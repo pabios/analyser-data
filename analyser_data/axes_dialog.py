@@ -111,7 +111,7 @@ class AxesDialog(tk.Toplevel):
         for name, a in plot.axes.items():
             lo, hi = a.get_ylim()
             axis = self.settings.y.get(name) or AxisSettings()
-            ttk.Label(grid, text=_(AXIS_NAMES[name]), style="Title.Card.TLabel").grid(
+            ttk.Label(grid, text=self._axis_name(name), style="Title.Card.TLabel").grid(
                 row=row, column=0, columnspan=4, sticky=tk.W, pady=(14, 4))
             vmin = self._field(grid, row + 1, _("Min"), _number(lo))
             vmax = self._field(grid, row + 1, _("Max"), _number(hi), column=2)
@@ -122,6 +122,12 @@ class AxesDialog(tk.Toplevel):
                          width=16).grid(row=row + 3, column=1, sticky=tk.W, pady=3)
             self.y_vars[name] = (vmin, vmax, label, scale, (_number(lo), _number(hi), a.get_ylabel()))
             row += 4
+
+    def _axis_name(self, name: str) -> str:
+        """Axe principal portant la température seule (issue #14) : nommé comme tel."""
+        if name == MAIN_AXIS and getattr(self.app.plot, "main_quantity", None):
+            name = self.app.plot.main_quantity
+        return _(AXIS_NAMES[name])
 
     def _build_curves_tab(self, tabs, plot) -> None:
         outer, box = card(tabs)
@@ -214,7 +220,7 @@ class AxesDialog(tk.Toplevel):
                         raise ValueError(_("Nombre invalide : « {} »").format(var.get()))
             if changed(label, initial[2]):
                 axis.label = label.get().strip() or None  # vide : titre par défaut (issue #3)
-            title = _(AXIS_NAMES[name])
+            title = self._axis_name(name)
             if axis.min is not None and axis.max is not None and axis.min >= axis.max:
                 raise ValueError(_("{} : le minimum doit être inférieur au maximum.").format(title))
             if axis.log and axis.min is not None and axis.min <= 0:

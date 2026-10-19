@@ -296,7 +296,7 @@ class AnalyserDataApp:
         # Voies qui suivent le curseur (issue #13) : les °C par défaut, ou choisies à la main
         row = ttk.Frame(shift, style="Card.TFrame")
         row.pack(fill=tk.X, pady=(6, 0))
-        self.lbl_shifted = ttk.Label(row, style="Muted.Card.TLabel", wraplength=240, justify=tk.LEFT)
+        self.lbl_shifted = ttk.Label(row, style="Muted.Card.TLabel", wraplength=190, justify=tk.LEFT)
         self.lbl_shifted.pack(side=tk.LEFT, anchor=tk.W)
         ttk.Button(row, text=_("Voies décalées…"), command=self.edit_shifted_channels).pack(side=tk.RIGHT, anchor=tk.N)
 

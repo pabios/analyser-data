@@ -369,6 +369,24 @@ def main():
     assert len(gui.session.measurements[gl].data) == 24000
     print("cycles : OK")
 
+    # Issue #14 : température seule -> axe principal (pas d'axe gauche vide)
+    gui.session.clear()
+    gui._checked.clear()
+    gui.open_files(EXAMPLES)
+    wait_idle(root, gui)
+    for k in gui._checked:
+        gui._checked[k] = k[0].startswith("nanodac")
+    gui._refresh_checkmarks()
+    gui.redraw()
+    pump(root)
+    assert list(gui.plot.axes) == ["main"] and gui.figure.axes[0].get_ylabel() == "Température (°C)"
+    shot(root, "27_temperature_seule.png")
+    axes_dialog = AxesDialog(gui, gui.selected_keys())
+    pump(root)
+    shot_window(axes_dialog, "28_axes_temperature.png")
+    axes_dialog.destroy()
+    print("température seule : OK")
+
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
     shot_window(help_window, "12_aide.png")
     help_window.destroy()

@@ -892,3 +892,26 @@ def test_every_curve_gets_a_distinct_look_and_red_is_reserved():
     plot.draw(series)
     looks = {(to_hex(line.get_color()), line.get_linestyle()) for line in plot.axes["main"].get_lines()}
     assert len(looks) == 25
+
+
+def test_temperature_alone_goes_on_the_main_axis():
+    """Issue #14 : « quand tu n'as que de la température, mets-la sur l'axe principal »."""
+    from matplotlib.colors import to_hex
+    from matplotlib.figure import Figure
+
+    from analyser_data.plotting import MAIN_AXIS, PlotManager
+    from analyser_data.theme import TEMPERATURE_COLOR
+
+    s = Session()
+    s.load_files([str(EXAMPLES / "GL980_Mes-_260601-170139.CSV"), str(EXAMPLES / "nanodac_Rd_Z.txt")])
+    gl, nano = list(s.measurements)
+    plot = PlotManager(Figure())
+    plot.draw(s.series([(nano, "Channel 2")]))
+    assert list(plot.axes) == [MAIN_AXIS] and len(plot.figure.axes) == 1  # pas d'axe secondaire
+    ax = plot.axes[MAIN_AXIS]
+    assert ax.get_ylabel() == "Température (°C)" and len(ax.get_yticks()) > 0
+    assert to_hex(ax.yaxis.label.get_color()) == TEMPERATURE_COLOR
+    assert plot.main_quantity == "température"
+
+    plot.draw(s.series([(gl, "Channel 4"), (nano, "Channel 2")]))  # avec un courant : axe secondaire
+    assert "température" in plot.axes and plot.main_quantity is None
