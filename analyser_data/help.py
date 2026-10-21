@@ -166,9 +166,10 @@ retirant des cycles entiers.
   niveau au raccord est compensée en douceur, sans toucher au front.
 • Aperçu avant d'appliquer : signal avant / après (raccords en pointillés) et spectre
   FFT avant / après ; la fréquence fondamentale f0 doit rester la même (✓).
-• Les cycles AJOUTÉS NE SONT PAS DES MESURES : ils sont hachurés sur le graphique, notés
-  dans le journal, marqués dans le CSV (colonne « Cycle ajouté (non mesuré) » = 1) et
-  signalés dans le rapport PDF. « Annuler la modification » revient en arrière.""",
+• Le signal et le temps restent continus ; le graphique ne marque pas les cycles ajoutés.
+  Mais les cycles AJOUTÉS NE SONT PAS DES MESURES : ils sont notés dans le journal,
+  marqués dans le CSV (colonne « Cycle ajouté (non mesuré) » = 1) et signalés dans le
+  rapport PDF. « Annuler la modification » revient en arrière.""",
      "Cycles — longer test", """\
 “Cycles” card → “Cycles…”: lengthen or shorten a test by duplicating or removing whole
 cycles.
@@ -182,9 +183,10 @@ cycles.
   smoothly compensated without touching the edge.
 • Preview before applying: signal before / after (joints dotted) and FFT spectrum before
   / after; the fundamental frequency f0 must stay the same (✓).
-• ADDED cycles ARE NOT MEASUREMENTS: they are hatched on the chart, recorded in the log,
-  flagged in the CSV (“Added cycle (not measured)” column = 1) and reported in the PDF
-  report. “Undo the change” goes back."""),
+• Signal and time stay continuous; the chart does not mark the added cycles. But ADDED
+  cycles ARE NOT MEASUREMENTS: they are recorded in the log, flagged in the CSV (“Added
+  cycle (not measured)” column = 1) and reported in the PDF report. “Undo the change”
+  goes back."""),
 
     ("Base de temps", "Base de temps", """\
 Pour superposer plusieurs fichiers :

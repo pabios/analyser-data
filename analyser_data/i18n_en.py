@@ -414,7 +414,6 @@ EN = {
     # Cycles (issue #12)
     'Cycle ajouté (non mesuré)': 'Added cycle (not measured)',
     'Cycle {} dupliqué {} fois dans {} après le cycle {} (voie de référence {}) : {} points AJOUTÉS, NON MESURÉS': 'Cycle {} duplicated {} times in {} after cycle {} (reference channel {}): {} points ADDED, NOT MEASURED',
-    'Cycles ajoutés (non mesurés)': 'Added cycles (not measured)',
     'Cycles {} à {} retirés de {} (voie de référence {}) : {} points, temps continu': 'Cycles {} to {} removed from {} (reference channel {}): {} points, continuous time',
     'Modification de cycles annulée : {}': 'Cycle change undone: {}',
     '{} : {} points ajoutés par duplication de cycles (NON MESURÉS, {} de données)': '{}: {} points added by duplicating cycles (NOT MEASURED, {} of data)',
@@ -423,11 +422,9 @@ EN = {
     'Cycles…': 'Cycles…',
     'Annuler la modification': 'Undo the change',
     'Aucun cycle ajouté.': 'No cycle added.',
-    '{} points ajoutés (NON MESURÉS, hachurés) dans {}.': '{} points added (NOT MEASURED, hatched) in {}.',
     '{} points retirés de {}.': '{} points removed from {}.',
     'Modification des cycles de {}…': 'Changing the cycles of {}…',
     'Cycles — essai plus long': 'Cycles — longer test',
-    "Dupliquez ou retirez des cycles entiers. Toutes les voies du fichier sont modifiées aux mêmes points, au début exact d'un cycle ; le temps reste continu. Les cycles ajoutés ne sont pas des mesures : ils sont hachurés et signalés dans le journal, le CSV et le rapport.": 'Duplicate or remove whole cycles. Every channel of the file is changed at the same points, at the exact start of a cycle; time stays continuous. Added cycles are not measurements: they are hatched and flagged in the log, the CSV and the report.',
     'Cycles détectés': 'Detected cycles',
     'Voie de référence': 'Reference channel',
     'N°': 'No.',
@@ -453,4 +450,6 @@ EN = {
     '{} points ajoutés (NON MESURÉS) sur toutes les voies de {}': '{} points added (NOT MEASURED) on every channel of {}',
     '{} points retirés sur toutes les voies de {}': '{} points removed on every channel of {}',
     'Numéros de cycles invalides.': 'Invalid cycle numbers.',
+    '{} points ajoutés (NON MESURÉS) dans {}.': '{} points added (NOT MEASURED) in {}.',
+    "Dupliquez ou retirez des cycles entiers. Toutes les voies du fichier sont modifiées aux mêmes points, au début exact d'un cycle ; le signal et le temps restent continus. Les cycles ajoutés ne sont pas des mesures : ils sont signalés dans le journal, le CSV et le rapport.": 'Duplicate or remove whole cycles. Every channel of the file is changed at the same points, at the exact start of a cycle; signal and time stay continuous. Added cycles are not measurements: they are flagged in the log, the CSV and the report.',
 }

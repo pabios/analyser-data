@@ -3,7 +3,8 @@
 Les cycles sont détectés sur une voie de référence et numérotés. Toutes les voies du fichier
 sont modifiées aux mêmes points, au début exact d'un cycle. L'aperçu montre le signal et son
 spectre (FFT) avant / après : la fréquence fondamentale f0 doit rester la même. Les cycles
-ajoutés ne sont pas des mesures : ils sont hachurés et signalés partout.
+ajoutés ne sont pas des mesures : ils sont signalés dans le journal, le CSV et le rapport
+(pas de hachure sur le graphique, à la demande du client).
 """
 from __future__ import annotations
 
@@ -47,8 +48,8 @@ class CyclesDialog(tk.Toplevel):
         body.pack(fill=tk.BOTH, expand=True)
         ttk.Label(body, text=_("Cycles — essai plus long"), font=app.fonts.brand).pack(anchor=tk.W)
         ttk.Label(body, text=_("Dupliquez ou retirez des cycles entiers. Toutes les voies du fichier sont modifiées "
-                               "aux mêmes points, au début exact d'un cycle ; le temps reste continu. Les cycles "
-                               "ajoutés ne sont pas des mesures : ils sont hachurés et signalés dans le journal, "
+                               "aux mêmes points, au début exact d'un cycle ; le signal et le temps restent continus. "
+                               "Les cycles ajoutés ne sont pas des mesures : ils sont signalés dans le journal, "
                                "le CSV et le rapport."),
                   style="Muted.TLabel", wraplength=1100, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 12))
 
@@ -202,10 +203,6 @@ class CyclesDialog(tk.Toplevel):
         for y, color, label in ((before, C["border_strong"], _("Avant")), (after, "#1f5fd6", _("Après"))):
             stride = max(1, len(y) // PREVIEW_POINTS)
             ax.plot(np.arange(0, len(y), stride) * step_min, y[::stride], color=color, linewidth=0.9, label=label)
-        if self.kind.get() == "duplicate":
-            start = preview["junctions"][0] if preview["junctions"] else 0
-            ax.axvspan(start * step_min, (start + preview["added_points"]) * step_min, facecolor="#f59e0b",
-                       alpha=0.15, hatch="///", edgecolor="#d97706", linewidth=0)
         for j in preview["junctions"]:
             ax.axvline(j * step_min, color="#d97706", linewidth=0.8, linestyle="--")
         ax.set_xlabel(_("Temps écoulé (min)"), fontsize=8)

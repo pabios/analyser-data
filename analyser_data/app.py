@@ -557,7 +557,7 @@ class AnalyserDataApp:
             self._rebuild_tree()
             self.redraw()
             self._update_cycles_label()
-            self._set_status((_("{} points ajoutés (NON MESURÉS, hachurés) dans {}.") if delta > 0
+            self._set_status((_("{} points ajoutés (NON MESURÉS) dans {}.") if delta > 0
                               else _("{} points retirés de {}.")).format(abs(delta), key[0]))
 
         self.run_in_background(_("Modification des cycles de {}…").format(key[0]),
@@ -791,8 +791,7 @@ class AnalyserDataApp:
         self._gid_key = {s.gid: key for s, key in zip([s for s in series if not s.raw], keys)}
         self.plot.time_offset_min = self.session.time_offset_min
         self.plot.percent_axis = self.session.percent_axis
-        spans = [] if self.session.percent_axis else self.session.synthetic_spans({k[0] for k in keys})
-        self.plot.draw(series, settings=self.plot_settings, spans=spans)
+        self.plot.draw(series, settings=self.plot_settings)
         self._key_color = {self._gid_key[gid]: color for gid, color in self.plot.colors.items()}
         self._refresh_checkmarks()
         self._update_empty_state()

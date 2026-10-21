@@ -65,8 +65,8 @@ python main.py
 7. Carte **Cycles** → **Cycles…** : **essai plus long** en dupliquant (ou raccourci en retirant)
    des cycles entiers, détectés et numérotés sur une voie de référence. Toutes les voies du
    fichier sont modifiées aux mêmes points, au début exact d'un cycle ; aperçu du signal et du
-   spectre FFT avant / après (même f0). Les cycles ajoutés **ne sont pas des mesures** : hachurés,
-   notés dans le journal, le CSV et le rapport. Annulable.
+   spectre FFT avant / après (même f0). Signal et temps continus. Les cycles ajoutés **ne sont
+   pas des mesures** : notés dans le journal, le CSV et le rapport. Annulable.
 
    ![Cycles](docs/captures/6-cycles.png)
 8. **Exporter ▾** :

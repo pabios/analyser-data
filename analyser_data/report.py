@@ -185,8 +185,7 @@ def _plot_figure(session, keys, view, title, settings=None) -> Figure:
     plot.legend_pad = 2.0  # légende écartée du bord de la page A4
     plot.time_offset_min = session.time_offset_min
     plot.percent_axis = session.percent_axis
-    spans = [] if session.percent_axis else session.synthetic_spans({k[0] for k in keys})
-    plot.draw(session.series(keys), title=title, settings=settings, spans=spans)
+    plot.draw(session.series(keys), title=title, settings=settings)
     if view is not None and fig.axes:
         fig.axes[0].set_xlim(*view)
     # Mise en page automatique (comme à l'écran) : la légende reste hors des courbes (issue #6),

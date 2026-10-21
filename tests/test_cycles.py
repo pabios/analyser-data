@@ -110,7 +110,7 @@ def test_remove_cycles_shortens_the_test():
     assert name not in s.synthetic or not s.synthetic[name].any()  # rien d'ajouté
 
 
-def test_added_cycles_are_flagged_in_csv_plot_and_report(tmp_path):
+def test_added_cycles_are_flagged_in_csv_and_report_without_hatching(tmp_path):
     import pandas as pd
     from matplotlib.figure import Figure
 
@@ -130,9 +130,9 @@ def test_added_cycles_are_flagged_in_csv_plot_and_report(tmp_path):
     assert flag.sum() == added and set(flag.unique()) == {0, 1}
 
     plot = PlotManager(Figure())
-    plot.draw(s.series([key]), spans=s.synthetic_spans())
-    assert "Cycles ajoutés (non mesurés)" in [t.get_text() for t in plot.legend.get_texts()]
+    plot.draw(s.series([key]))
+    assert [t.get_text() for t in plot.legend.get_texts()] == ["Channel 7 (A)"]  # pas de hachure (client)
     fig = _plot_figure(s, [key], None, "Rapport")
-    assert any(p.get_hatch() == "///" for p in fig.axes[0].patches)
+    assert not fig.axes[0].patches
     summary = _summary_page(s, [key], None, "Rapport")
     assert any("NON MESURÉS" in t.get_text() for t in summary.texts)
