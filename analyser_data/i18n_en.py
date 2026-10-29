@@ -455,4 +455,7 @@ EN = {
     # Échelle du temps (issue #15)
     "La colonne « {} » est un compteur d'échantillons, pas un temps : temps calculé avec la période annoncée dans l'en-tête ({}).": 'The “{}” column is a sample counter, not a time: time computed with the period stated in the header ({}).',
     "La colonne « {} » semble être un compteur d'échantillons : 1 point par seconde supposé. Si l'appareil enregistre plus vite, la durée affichée est fausse : exportez le fichier avec sa colonne date / heure ou avec la période d'échantillonnage.": 'The “{}” column looks like a sample counter: 1 point per second assumed. If the device records faster, the displayed duration is wrong: export the file with its date / time column or with the sampling period.',
+    "Temps du fichier incohérent avec son en-tête (durée lue {}, annoncée {} = {} points × {}) : temps recalculé à partir de l'en-tête.": 'File time inconsistent with its header (duration read {}, stated {} = {} points × {}): time recomputed from the header.',
+    'Durée : {}': 'Duration: {}',
+    'Durée : {} (du {} au {})': 'Duration: {} (from {} to {})',
 }

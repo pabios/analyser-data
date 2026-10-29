@@ -80,7 +80,7 @@ _DIGITS_RE = re.compile(r"^\d+([eE][+-]?\d+)?$")
 _POINT_DECIMAL_RE = re.compile(r"^[+-]?\s*\d+\.\d+")
 _MERGE_COMMA_RE = re.compile(r"(^|,)([+-] *\d+),(\d+(?:[eE][+-]?\d+)?)(?=,|$)", re.MULTILINE)
 _WHOLE_QUOTED_RE = re.compile(r'^"(.*)"$', re.MULTILINE)
-_SAMPLING_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(us|µs|ms|s|sec|min|h)\s*$", re.IGNORECASE)
+_SAMPLING_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(us|µs|ms|msec|s|sec|min|h)\s*$", re.IGNORECASE)
 _DATETIME_LIKE_RE = re.compile(r"^\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}|^\d{1,3}:\d{2}")
 _DURATION_RE = re.compile(r"^\d+:\d{2}:\d{2}([.,]\d+)?$")
 _COMMA_SECONDS_RE = re.compile(r":\d{2},\d+$")
@@ -359,20 +359,23 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
 
     progress(_("Conversion du temps de {}…").format(path.name))
     time_s, start, used_cols, counter = _extract_time(raw, decimal, path.name)
-    declared = _declared_sampling(head_rows[:first_data])
+    period_declared = _declared_sampling(head_rows[:first_data])
     counter_note = ""
     if counter:
         # Issue #15 : compteur d'échantillons (1, 2, 3…) pris pour des secondes -> un essai de 3 h
         # à 100 ms s'affichait sur 30 h. Le temps vient de la période annoncée dans l'en-tête.
-        if declared > 0:
-            time_s = (time_s - time_s[np.isfinite(time_s)][0]) * declared
+        if period_declared > 0:
+            time_s = (time_s - time_s[np.isfinite(time_s)][0]) * period_declared
             counter_note = _("La colonne « {} » est un compteur d'échantillons, pas un temps : temps calculé avec "
-                             "la période annoncée dans l'en-tête ({}).").format(counter, format_period(declared))
+                             "la période annoncée dans l'en-tête ({}).").format(counter, format_period(period_declared))
         else:
             counter_note = _("La colonne « {} » semble être un compteur d'échantillons : 1 point par seconde supposé. "
                              "Si l'appareil enregistre plus vite, la durée affichée est fausse : exportez le fichier "
                              "avec sa colonne date / heure ou avec la période d'échantillonnage.").format(counter)
-    time_s, rebuilt = _rebuild_coarse_time(time_s, declared)
+    time_s, rebuilt = _rebuild_coarse_time(time_s, period_declared)
+    # Issue #15 : temps lu incohérent avec l'en-tête (période × nombre de points, début / fin) :
+    # l'en-tête de l'enregistreur fait foi (ex. durée ×10)
+    time_s, scale_note = _check_against_header(time_s, head_rows[:first_data], period_declared)
 
     # Voies de mesure : toutes les autres colonnes numériques
     numeric_cols = []
@@ -442,6 +445,8 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
         )
     if counter_note:
         msgs.append(counter_note)
+    if scale_note:
+        msgs.append(scale_note)
     if rebuilt:
         msgs.append(_("Horodatage moins précis que la période d'échantillonnage ({}) : temps "
                     "recalculé à partir de la période (fichier réenregistré par Excel ?).").format(
@@ -605,6 +610,51 @@ def _declared_count(preamble: List[List[str]]) -> int:
     return 0
 
 
+def _header_duration(preamble: List[List[str]]) -> Optional[float]:
+    """Durée annoncée par « Start time » / « Stop time » de l'en-tête (Graphtec), en s."""
+    moments = {}
+    for row in preamble:
+        cells = [c.strip().strip('"') for c in row if c.strip()]
+        if len(cells) >= 2 and re.match(r"^(start|stop) ?time$", cells[0], re.IGNORECASE):
+            text = " ".join(cells[1:3])
+            moment = pd.to_datetime(text, dayfirst="/" in text and not re.match(r"^\d{4}", text), errors="coerce")
+            if moment is not pd.NaT and not pd.isna(moment):
+                moments[cells[0].lower().split()[0][:4]] = moment
+    if "star" in moments and "stop" in moments:
+        seconds = (moments["stop"] - moments["star"]).total_seconds()
+        if 0 < seconds < 400 * 86400:
+            return seconds
+    return None
+
+
+def _check_against_header(seconds: np.ndarray, preamble: List[List[str]], period: float):
+    """Compare la durée lue dans les données à celle annoncée par l'en-tête (période × points,
+    confirmée par début / fin si présents). Écart > 5 % : temps recalculé depuis l'en-tête."""
+    count = _declared_count(preamble)
+    finite = seconds[np.isfinite(seconds)]
+    if not (period > 0) or count < 3 or len(finite) < 3:
+        return seconds, ""
+    if abs(len(seconds) - count) > max(2, 0.01 * count):
+        return seconds, ""  # fichier incomplet (Excel…) : signalé ailleurs
+    expected = (count - 1) * period
+    stop_start = _header_duration(preamble)
+    if stop_start is not None and abs(stop_start - expected) > max(2 * period, 0.02 * expected):
+        return seconds, ""  # en-tête lui-même incohérent : on ne tranche pas
+    read = float(finite[-1] - finite[0])
+    if expected <= 0 or abs(read / expected - 1) <= 0.05:
+        return seconds, ""
+    rebuilt = np.where(np.isfinite(seconds), np.arange(len(seconds)) * period, np.nan)
+    note = _("Temps du fichier incohérent avec son en-tête (durée lue {}, annoncée {} = {} points × {}) : temps "
+             "recalculé à partir de l'en-tête.").format(_hms(read), _hms(expected), _thousands(count),
+                                                     format_period(period))
+    return rebuilt, note
+
+
+def _hms(seconds: float) -> str:
+    total = int(round(seconds))
+    return "{}:{:02d}:{:02d}".format(total // 3600, total % 3600 // 60, total % 60)
+
+
 def _thousands(n: int) -> str:
     return "{:,}".format(n).replace(",", " ")
 
@@ -618,7 +668,8 @@ def _declared_sampling(preamble: List[List[str]]) -> float:
             if m:
                 value = float(m.group(1).replace(",", "."))
                 unit = m.group(2).lower()
-                return value * {"us": 1e-6, "µs": 1e-6, "ms": 1e-3, "s": 1.0, "sec": 1.0, "min": 60.0, "h": 3600.0}[unit]
+                return value * {"us": 1e-6, "µs": 1e-6, "ms": 1e-3, "msec": 1e-3, "s": 1.0, "sec": 1.0, "min": 60.0,
+                                "h": 3600.0}[unit]
     return float("nan")
 
 

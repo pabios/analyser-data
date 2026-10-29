@@ -17,6 +17,9 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Dict, List, Optional
 
+import numpy as np
+import pandas as pd
+
 from .excel import is_excel, sheet_names
 from .i18n import _, get_setting, set_setting
 from .loader import SPACE, TIME_COL, LoadError
@@ -201,8 +204,14 @@ class ImportDialog(tk.Toplevel):
             _("séparateur {}").format(_(SEPARATOR_NAMES.get(m.separator, m.separator)))
         lines = [_("{} · {} · {} voie(s) · {} lignes · période {}").format(
             _(m.source), separator, len(m.channels), "{:,}".format(len(m.data)).replace(",", " "), m.period_label)]
+        # Durée totale bien visible (issue #15) : à comparer avec la durée réelle de l'essai
+        duration = format_hms(m.duration_min + (m.period_s / 60.0 if np.isfinite(m.period_s) else 0.0))
         if m.start is not None:
-            lines.append(_("Début : {}").format(m.start.strftime("%d/%m/%Y %H:%M:%S")))
+            end = m.start + pd.Timedelta(minutes=m.duration_min)
+            lines.append(_("Durée : {} (du {} au {})").format(
+                duration, m.start.strftime("%d/%m/%Y %H:%M:%S"), end.strftime("%d/%m/%Y %H:%M:%S")))
+        else:
+            lines.append(_("Durée : {}").format(duration))
         lines.append(_("Voies : {}").format(", ".join(legend_label(ch) for ch in m.channels)))
         lines += m.warnings
         self.info.configure(text="\n".join(lines), foreground=C["fg"])

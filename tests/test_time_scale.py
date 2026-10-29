@@ -63,3 +63,25 @@ def test_graphtec_durations(tmp_path, minutes):
                                              np.sin(k / 50)) for k in range(n)]
     m = load_measurement(_write(tmp_path, "gl860.CSV", lines))
     assert m.duration_min == pytest.approx(minutes, rel=1e-3)
+
+
+def test_time_inconsistent_with_the_graphtec_header_is_rebuilt(tmp_path):
+    """Données à 100 ms dont l'horodatage lu donne 10 fois trop (3 h -> 30 h) alors que
+    l'en-tête annonce 108 000 points × 100 ms = 3 h, de 09:00:00 à 12:00:00."""
+    n = 3 * 3600 * 10
+    t = pd.Timestamp("2026-07-10 09:00:00") + pd.to_timedelta(np.arange(n), unit="s")  # 1 s au lieu de 0,1 s
+    lines = ["Model,GL860", "Sampling,100ms", "Total data points,{}".format(n),
+             "Start time,10/07/2026,09:00:00", "Stop time,10/07/2026,11:59:59", "Data",
+             "No.,Date&Time,CH1", "NO.,Time,A"]
+    lines += ["{},{},{:+.3f}".format(k + 1, t[k].strftime("%Y-%m-%d %H:%M:%S"), np.sin(k / 50)) for k in range(n)]
+    m = load_measurement(_write(tmp_path, "gl860_3h.CSV", lines))
+    assert m.duration_min == pytest.approx(180, rel=1e-3)  # 3 h, pas 30 h
+    assert any("incohérent avec son en-tête" in w for w in m.warnings)
+
+
+def test_consistent_header_changes_nothing():
+    from pathlib import Path
+
+    m = load_measurement(Path(__file__).resolve().parent.parent / "exemples" / "autres_formats" / "GL860_1s.CSV")
+    assert m.duration_min == pytest.approx(669 / 60)
+    assert not any("incohérent" in w for w in m.warnings)
