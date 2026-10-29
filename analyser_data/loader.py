@@ -60,6 +60,8 @@ _SUBSECOND_FACTOR = {"ms": 1e-3, "msec": 1e-3, "us": 1e-6, "µs": 1e-6}
 _OVER_RANGE_PATTERN = r"^(\+{3,}|-{3,}|(?i:burnout|over|under|overrange|underrange|-?ovf|err))$"
 _OVER_RANGE_RE = re.compile(_OVER_RANGE_PATTERN)
 _INDEX_NAME_RE = re.compile(r"^(no\.?|n°|num(ber|[ée]ro)?|index|#|id|ligne)$", re.IGNORECASE)
+# Noms de compteurs d'échantillons (jamais des temps, même s'ils contiennent « time ») — issue #15
+_COUNTER_NAME_RE = re.compile(r"sample|[ée]chantillon|point|count|compteur|\bpt\b|\bnr\b|data ?no", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"^[+-]?\s*(\d+([.,]\d*)?|[.,]\d+)([eE][+-]?\d+)?$")  # « + 24.003 » accepté
 _DECIMAL_COMMA_RE = re.compile(r"^[+-]?\s*\d*,\d+([eE][+-]?\d+)?$")
 # Espaces à l'intérieur d'un nombre : « 0 ,01 » (issue #2, X_axis_D2.CSV), séparateur de
@@ -356,8 +358,21 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
         raw = raw[raw.notna().sum(axis=1) >= 3].reset_index(drop=True)
 
     progress(_("Conversion du temps de {}…").format(path.name))
-    time_s, start, used_cols = _extract_time(raw, decimal, path.name)
-    time_s, rebuilt = _rebuild_coarse_time(time_s, _declared_sampling(head_rows[:first_data]))
+    time_s, start, used_cols, counter = _extract_time(raw, decimal, path.name)
+    declared = _declared_sampling(head_rows[:first_data])
+    counter_note = ""
+    if counter:
+        # Issue #15 : compteur d'échantillons (1, 2, 3…) pris pour des secondes -> un essai de 3 h
+        # à 100 ms s'affichait sur 30 h. Le temps vient de la période annoncée dans l'en-tête.
+        if declared > 0:
+            time_s = (time_s - time_s[np.isfinite(time_s)][0]) * declared
+            counter_note = _("La colonne « {} » est un compteur d'échantillons, pas un temps : temps calculé avec "
+                             "la période annoncée dans l'en-tête ({}).").format(counter, format_period(declared))
+        else:
+            counter_note = _("La colonne « {} » semble être un compteur d'échantillons : 1 point par seconde supposé. "
+                             "Si l'appareil enregistre plus vite, la durée affichée est fausse : exportez le fichier "
+                             "avec sa colonne date / heure ou avec la période d'échantillonnage.").format(counter)
+    time_s, rebuilt = _rebuild_coarse_time(time_s, declared)
 
     # Voies de mesure : toutes les autres colonnes numériques
     numeric_cols = []
@@ -425,6 +440,8 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
                 _(" (probablement tronqué par Excel, limité à 1 048 576 lignes)")
                 if len(df) + first_data >= EXCEL_MAX_ROWS - 50 or declared > EXCEL_MAX_ROWS else "")
         )
+    if counter_note:
+        msgs.append(counter_note)
     if rebuilt:
         msgs.append(_("Horodatage moins précis que la période d'échantillonnage ({}) : temps "
                     "recalculé à partir de la période (fichier réenregistré par Excel ?).").format(
@@ -669,14 +686,15 @@ def _looks_space_separated(lines: List[str]) -> bool:
 
 def _trailing_data_block(lines: List[str], separators=SEPARATORS) -> Tuple[Optional[str], List[str]]:
     """Séparateur et dernières lignes de mesure : le bloc ininterrompu de lignes, en fin de
-    fichier, qui ont toutes le même nombre de champs (au moins 3) que la dernière ligne.
+    fichier, qui ont toutes le même nombre de champs (au moins 2) que la dernière ligne. À
+    égalité, le séparateur prioritaire l'emporte (« ; » avant « , », qui peut être un décimal).
     Indépendant de la longueur du préambule, même pour un enregistrement de 5 lignes."""
     best, best_block = None, []
     for sep in separators:
         rows = list(csv.reader(lines, delimiter=sep))
         while rows and sum(_is_value(f) for f in rows[-1]) < 2:
             rows.pop()  # lignes de fin sans mesures (bilan, commentaire) : ignorées ici
-        if not rows or len(rows[-1]) < 3:
+        if not rows or len(rows[-1]) < 2:  # 2 colonnes suffisent (temps ; valeur)
             continue
         width, run = len(rows[-1]), 0
         for row in reversed(rows):
@@ -951,7 +969,9 @@ def _extract_time(raw: pd.DataFrame, decimal: str, filename: str):
             series = raw[main].fillna("") + " " + raw[other].fillna("")
             used.add(other)
 
-    seconds, start = _parse_time(series, main, decimal, filename)
+    seconds, start, counter = _parse_time(series, main, decimal, filename)
+    if counter and _TIME_NAME_RE.search(names[main]) and not _COUNTER_NAME_RE.search(names[main]):
+        counter = False  # « Temps » en secondes entières : c'est bien un temps
 
     # Graphtec : colonne "ms" séparée qui complète l'horodatage à la seconde
     if ms_cols and start is not None:
@@ -960,13 +980,14 @@ def _extract_time(raw: pd.DataFrame, decimal: str, filename: str):
             factor = _SUBSECOND_FACTOR[split_name_unit(ms_cols[0])[0].lower()]
             seconds = seconds + sub.fillna(0).to_numpy(dtype=float) * factor
             used.add(ms_cols[0])
+            counter = False
 
     for c in cols:  # les autres colonnes date/heure ne sont pas des voies
         if c != main and _TIME_NAME_RE.search(names[c]):
             head = raw[c].dropna().head(200)
             if _to_numeric(head, decimal).notna().mean() < 0.5:
                 used.add(c)
-    return seconds, start, used
+    return seconds, start, used, (main if counter else "")
 
 
 def _parse_time(series: pd.Series, header: str, decimal: str, filename: str):
@@ -998,15 +1019,20 @@ def _parse_time(series: pd.Series, header: str, decimal: str, filename: str):
             # Date série Excel (jours depuis le 30/12/1899)
             start = pd.Timestamp("1899-12-30") + pd.to_timedelta(first, unit="D")
             # arrondi à la ms : les dates série n'ont que ~8 décimales
-            return np.round((values - first) * 86400.0, 3), start.round("ms")
+            return np.round((values - first) * 86400.0, 3), start.round("ms"), False
         else:
             factor = 1.0  # secondes par défaut
-        return (values - first) * factor, None
+            # Compteur d'échantillons : entiers qui augmentent de 1 à chaque ligne, sans unité
+            finite = values[np.isfinite(values)]
+            if (len(finite) > 2 and step == 1.0 and np.all(finite == np.round(finite))
+                    and np.mean(np.diff(finite) == 1) > 0.99):
+                return values - first, None, True
+        return (values - first) * factor, None, False
 
     if np.mean([bool(_DURATION_RE.match(v)) for v in sample]) > 0.9:
         td = pd.to_timedelta(s.str.replace(",", ".", regex=False), errors="coerce")
         secs = td.dt.total_seconds().to_numpy(dtype=float)
-        return secs - secs[np.isfinite(secs)][0], None
+        return secs - secs[np.isfinite(secs)][0], None, False
 
     # Date/heure absolue. "2026/10/01" -> année en tête ; "01/10/2026" -> jour en tête.
     if any(_COMMA_SECONDS_RE.search(v) for v in sample):  # « 17:01:39,500 »
@@ -1019,7 +1045,7 @@ def _parse_time(series: pd.Series, header: str, decimal: str, filename: str):
         )
     start = dt[dt.notna()].iloc[0]
     secs = (dt - start).dt.total_seconds().to_numpy(dtype=float)
-    return secs, start
+    return secs, start, False
 
 
 # Formats de date/heure courants, essayés d'abord : bien plus rapide que la détection
