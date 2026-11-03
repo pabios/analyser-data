@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from analyser_data.loader import TIME_COL, load_measurement
+from analyser_data.loader import TIME_COL, LoadError, load_measurement
 from analyser_data.plotting import format_axis_time
 
 
@@ -85,3 +85,40 @@ def test_consistent_header_changes_nothing():
     m = load_measurement(Path(__file__).resolve().parent.parent / "exemples" / "autres_formats" / "GL860_1s.CSV")
     assert m.duration_min == pytest.approx(669 / 60)
     assert not any("incohérent" in w for w in m.warnings)
+
+
+def _fmt_mmss(k):
+    return "{:02d}:{:04.1f}".format(k // 60, k % 60)
+
+
+@pytest.mark.parametrize("label, fmt", [
+    ("MM:SS.f", _fmt_mmss),
+    ("jours", lambda k: "{} j {:02d}:{:02d}:{:02d}".format(k // 86400, k % 86400 // 3600, k % 3600 // 60, k % 60)),
+    ("d .NET", lambda k: "{}.{:02d}:{:02d}:{:02d}".format(k // 86400, k % 86400 // 3600, k % 3600 // 60, k % 60)),
+    ("secondes avec unité", lambda k: "{} s".format(k)),
+    ("minutes décimales", lambda k: "{} min".format(str(round(k / 60, 4)).replace(".", ","))),
+    ("h m s", lambda k: "{}h{:02d}m{:02d}s".format(k // 3600, k % 3600 // 60, k % 60)),
+])
+def test_other_ways_of_writing_time(tmp_path, label, fmt):
+    """Issue #16 (« chaud initial.csv ») : colonne « Temps » écrite autrement que date/heure ou H:MM:SS."""
+    step = 30 if label in ("jours", "d .NET") else 1
+    seconds = list(range(0, 600 * step, step))
+    lines = ["Temps;Température (°C);Humidité (%HR)"]
+    lines += ["{};{};{}".format(fmt(k), str(round(20 + i / 100, 2)).replace(".", ","), "45,0")
+              for i, k in enumerate(seconds)]
+    m = load_measurement(_write(tmp_path, "chaud initial.csv", lines))
+    assert m.duration_min == pytest.approx(seconds[-1] / 60, rel=1e-3), label
+    assert [c.unit for c in m.channels] == ["°C", "%HR"]
+
+
+def test_time_of_day_crossing_midnight(tmp_path):
+    t = pd.Timestamp("2026-10-29 23:50:00") + pd.to_timedelta(np.arange(1200), unit="s")
+    lines = ["Temps;Température (°C)"] + ["{};21,5".format(x.strftime("%H:%M:%S")) for x in t]
+    m = load_measurement(_write(tmp_path, "nuit.csv", lines))
+    assert m.duration_min == pytest.approx(1199 / 60)  # pas de saut négatif à minuit
+
+
+def test_unreadable_time_shows_the_values_read(tmp_path):
+    lines = ["Temps;Température (°C);Humidité (%HR)"] + ["étape {};21,5;45,0".format(k) for k in range(50)]
+    with pytest.raises(LoadError, match="Valeurs lues : « étape 0 »"):
+        load_measurement(_write(tmp_path, "chaud initial.csv", lines))

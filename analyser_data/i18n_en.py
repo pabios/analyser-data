@@ -477,4 +477,5 @@ EN = {
     'Le fichier GBD « {} » ne contient aucune mesure.': 'The GBD file “{}” contains no measurement.',
     'Aucune voie analogique (CH…) dans le fichier GBD « {} ».': 'No analog channel (CH…) in the GBD file “{}”.',
     'Fichier GBD incomplet : {} mesures annoncées, {} lues.': 'Incomplete GBD file: {} records stated, {} read.',
+    '\n\nValeurs lues : {}': '\n\nValues read: {}',
 }

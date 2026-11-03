@@ -1149,17 +1149,30 @@ def _parse_time(series: pd.Series, header: str, decimal: str, filename: str):
 
     if np.mean([bool(_DURATION_RE.match(v)) for v in sample]) > 0.9:
         td = pd.to_timedelta(s.str.replace(",", ".", regex=False), errors="coerce")
-        secs = td.dt.total_seconds().to_numpy(dtype=float)
+        secs = _unwrap_midnight(td.dt.total_seconds().to_numpy(dtype=float))
         return secs - secs[np.isfinite(secs)][0], None, False
+
+    # Durées écrites autrement (issue #16) : « 05:30,2 » (MM:SS), « 1 j 02:03:04 », « 1.02:03:04 »,
+    # « 10 s », « 1h02m03s »… — à tester AVANT la date/heure, qui les prendrait pour des heures du jour
+    if np.mean([bool(_DURATION_LIKE_RE.match(v)) for v in sample]) > 0.9:
+        flexible = _flexible_seconds(s)
+        if flexible is not None:
+            return flexible - flexible[np.isfinite(flexible)][0], None, False
 
     # Date/heure absolue. "2026/10/01" -> année en tête ; "01/10/2026" -> jour en tête.
     if any(_COMMA_SECONDS_RE.search(v) for v in sample):  # « 17:01:39,500 »
         s = s.str.replace(",", ".", regex=False)
     dt = _to_datetime(s)
     if dt.notna().mean() < 0.9:
+        # Autres écritures du temps (issue #16) : MM:SS, jours, unités dans les cases, virgule…
+        flexible = _flexible_seconds(s)
+        if flexible is not None:
+            return flexible - flexible[np.isfinite(flexible)][0], None, False
+        examples = ", ".join("« {} »".format(v[:24]) for v in sample.head(3))
         raise LoadError(
             _("La colonne temps « {} » du fichier « {} » n'est pas reconnue "
             "(attendu : date/heure, H:MM:SS ou temps écoulé en ms / s / min).").format(header, filename)
+            + _("\n\nValeurs lues : {}").format(examples)
         )
     start = dt[dt.notna()].iloc[0]
     secs = (dt - start).dt.total_seconds().to_numpy(dtype=float)
@@ -1174,6 +1187,66 @@ _DATETIME_FORMATS = (
     "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M:%S.%f", "%d/%m/%Y %H:%M",
     "%d-%m-%Y %H:%M:%S", "%d.%m.%Y %H:%M:%S", "%d/%m/%y %H:%M:%S",
 )
+
+
+_DAYS_PREFIX_RE = re.compile(r"^(\d+)\s*(?:j|d|jours?|days?)\.?\s+|^(\d+)\.(?=\d{1,2}:)", re.IGNORECASE)
+_CLOCK_RE = re.compile(r"^(?:(\d+):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)$")
+_DURATION_LIKE_RE = re.compile(
+    r"^\s*(\d+\s*(j|d|jours?|days?)\.?\s+\S"  # jours + heure
+    r"|\d+\.\d{1,2}:\d{2}"  # 1.02:03:04
+    r"|\d{1,3}:\d{2}[.,]\d+\s*$"  # MM:SS,f
+    r"|(\d+([.,]\d+)?\s*(ms|msec|s|sec|min|mn|h|hr)\s*)+$)", re.IGNORECASE)
+_UNIT_TOKEN_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(ms|msec|s|sec|secondes?|min|mn|minutes?|m|h|hr|heures?|hours?|j|d)\b",
+                            re.IGNORECASE)
+_UNIT_SECONDS = {"ms": 1e-3, "msec": 1e-3, "s": 1, "sec": 1, "seconde": 1, "secondes": 1, "min": 60, "mn": 60,
+                 "minute": 60, "minutes": 60, "m": 60, "h": 3600, "hr": 3600, "heure": 3600, "heures": 3600,
+                 "hour": 3600, "hours": 3600, "j": 86400, "d": 86400}
+
+
+def _one_duration(text: str) -> float:
+    """« 1 j 02:03:04,5 », « 05:30.2 », « 1h02m03s », « 1,5 min », « 12,3 » -> secondes (nan sinon)."""
+    t = text.strip().replace(",", ".").lower()
+    if not t:
+        return np.nan
+    days = 0.0
+    prefix = _DAYS_PREFIX_RE.match(t)
+    if prefix:
+        days = float(prefix.group(1) or prefix.group(2))
+        t = t[prefix.end():].strip()
+    clock = _CLOCK_RE.match(t)
+    if clock:
+        hours = float(clock.group(1)) if clock.group(1) else 0.0
+        return days * 86400 + hours * 3600 + float(clock.group(2)) * 60 + float(clock.group(3))
+    tokens = _UNIT_TOKEN_RE.findall(t)
+    if tokens and re.fullmatch(r"(\s*\d+(?:\.\d+)?\s*[a-zé]+\s*)+", t):
+        return days * 86400 + sum(float(v) * _UNIT_SECONDS[u.lower()] for v, u in tokens)
+    try:
+        return days * 86400 + float(t.replace(" ", ""))
+    except ValueError:
+        return np.nan
+
+
+def _flexible_seconds(s: pd.Series) -> Optional[np.ndarray]:
+    """Lecture tolérante d'une colonne temps (dernier recours), ou None si elle reste illisible."""
+    sample = s[s != ""].head(200)
+    if not len(sample) or np.mean([np.isfinite(_one_duration(v)) for v in sample]) < 0.9:
+        return None
+    values = np.array([_one_duration(v) for v in s], dtype=float)
+    return _unwrap_midnight(values)
+
+
+def _unwrap_midnight(seconds: np.ndarray) -> np.ndarray:
+    """Heure du jour sans date qui repasse par 00:00:00 (essai sur plusieurs jours) : +24 h."""
+    finite = np.isfinite(seconds)
+    if finite.sum() < 2:
+        return seconds
+    values = seconds[finite]
+    jumps = np.diff(values) < -12 * 3600
+    if not jumps.any():
+        return seconds
+    out = seconds.copy()
+    out[finite] = values + np.concatenate(([0], np.cumsum(jumps))) * 86400.0
+    return out
 
 
 def _to_datetime(s: pd.Series) -> pd.Series:
