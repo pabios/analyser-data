@@ -72,6 +72,7 @@ class ImportDialog(tk.Toplevel):
         self.always = tk.BooleanVar(value=preview_enabled())
         ttk.Checkbutton(buttons, text=_("Toujours afficher cet aperçu à l'ouverture"), variable=self.always,
                         command=lambda: set_setting(SETTING, self.always.get())).pack(side=tk.LEFT)
+        ttk.Button(buttons, text=_("Extrait anonymisé…"), command=self._extract).pack(side=tk.LEFT, padx=(12, 0))
         self.btn_import = ttk.Button(buttons, text=_("Importer"), style="Primary.TButton", command=self.accept)
         self.btn_import.pack(side=tk.RIGHT)
         ttk.Button(buttons, text=_("Annuler"), command=self.destroy).pack(side=tk.RIGHT, padx=6)
@@ -237,6 +238,11 @@ class ImportDialog(tk.Toplevel):
                 format_hms(math.floor(minutes * 60) / 60), int(round(minutes * 60_000)) % 1000)
             cells = [time] + ["" if v != v else "{:.6g}".format(v) for v in values[1:]]
             self.table.insert("", tk.END, values=cells)
+
+    def _extract(self) -> None:
+        """Extrait anonymisé du fichier choisi (structure sans les mesures) pour un ticket."""
+        if self.files.selection():
+            self.app.save_anonymized_extract(self.files.selection()[0], self)
 
     def _update_import_button(self) -> None:
         ready = [m for m in self.results.values() if not isinstance(m, str)]

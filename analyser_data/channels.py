@@ -42,7 +42,7 @@ _UNIT_ALIASES = {
 }
 
 _TEMP_RE = re.compile(r"temp|°c", re.IGNORECASE)
-_HUM_RE = re.compile(r"hum|(^|[^a-z])(hr|rh)([^a-z]|$)", re.IGNORECASE)
+_HUM_RE = re.compile(r"hum|feucht|(^|[^a-z])(hr|rh|rf)([^a-z]|$)", re.IGNORECASE)
 
 # Grandeurs physiques reconnues
 VOLTAGE = "tension"
@@ -87,7 +87,7 @@ class Channel:
 # « ℃ » (caractère unique des centrales japonaises), « Â°C » / « �C » (degré mal décodé),
 # « ° C », « oC », « Deg.C », « % RH », « RH% »…
 _CELSIUS_KEYS = {"°c", "c°", "degc", "degreec", "degreesc", "celsius", "oc", "°", "deg"}
-_HUMIDITY_KEYS = {"%rh", "rh%", "%hr", "hr%", "rh", "hr", "%hrel", "%rel"}
+_HUMIDITY_KEYS = {"%rh", "rh%", "%hr", "hr%", "rh", "hr", "%hrel", "%rel", "%rf", "rf%", "rf"}  # rF : Feuchte
 
 
 def normalize_unit(unit: str) -> str:

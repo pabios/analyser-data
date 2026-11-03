@@ -276,6 +276,12 @@ def main():
     dialog.files.selection_set(str(EXAMPLES[0]))
     pump(root)
     shot_window(dialog, "19_import_apercu.png")
+    # Extrait anonymisé du fichier choisi (bouton de la fenêtre Import)
+    saved = app_module.filedialog.asksaveasfilename
+    app_module.filedialog.asksaveasfilename = lambda **k: str(OUT / "extrait_anonymise.txt")
+    dialog._extract()
+    app_module.filedialog.asksaveasfilename = saved
+    assert (OUT / "extrait_anonymise.txt").read_text(encoding="utf-8").startswith("# Extrait anonymisé")
     dialog.accept()
     pump(root)
     assert len(gui.session.measurements) == 2, gui.session.measurements

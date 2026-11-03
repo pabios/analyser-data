@@ -478,4 +478,13 @@ EN = {
     'Aucune voie analogique (CH…) dans le fichier GBD « {} ».': 'No analog channel (CH…) in the GBD file “{}”.',
     'Fichier GBD incomplet : {} mesures annoncées, {} lues.': 'Incomplete GBD file: {} records stated, {} read.',
     '\n\nValeurs lues : {}': '\n\nValues read: {}',
+    # Extrait anonymisé
+    "\n\nEnregistrer un extrait ANONYMISÉ de ce fichier pour l'envoyer au développeur ? En-têtes, dates et heures sont conservés ; les valeurs de mesure sont remplacées par des nombres au hasard.": '\n\nSave an ANONYMISED excerpt of this file to send to the developer? Headers, dates and times are kept; measured values are replaced by random numbers.',
+    "Enregistrer l'extrait anonymisé": 'Save the anonymised excerpt',
+    '{}_extrait_anonymise.txt': '{}_anonymised_excerpt.txt',
+    'Extrait': 'Excerpt',
+    'Extrait brut enregistré (anonymisation impossible : {}) :\n{}': 'Raw excerpt saved (anonymisation impossible: {}):\n{}',
+    'Extrait anonymisé': 'Anonymised excerpt',
+    'Extrait anonymisé…': 'Anonymised excerpt…',
+    'Extrait enregistré :\n{}\n\nIl ne contient pas vos mesures : vous pouvez le joindre au ticket.': 'Excerpt saved:\n{}\n\nIt does not contain your measurements: you can attach it to the ticket.',
 }

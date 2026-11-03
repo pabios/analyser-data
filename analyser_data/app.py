@@ -35,7 +35,7 @@ from .help import HelpWindow
 from .import_dialog import ImportDialog, needs_dialog, preview_enabled
 from .corrections_dialog import ProbeCorrectionsDialog, ShiftedChannelsDialog
 from .cycles_dialog import CyclesDialog
-from .loader import write_extract
+from .loader import write_anonymized_extract, write_extract
 from .report import build_report, save_figure_image
 from .session import journal_path
 from .plotting import PlotManager, PlotSettings, format_hms
@@ -439,20 +439,35 @@ class AnalyserDataApp:
 
     def _report_unreadable(self, path: Path, message: str) -> None:
         """Fichier refusé : explication + extrait à envoyer pour adapter le logiciel."""
-        if not messagebox.askyesno(_("Fichier non conforme"),
-            message + _("\n\nEnregistrer un extrait de ce fichier (début et fin, quelques Ko) "
-                        "pour l'envoyer au développeur ?"),
+        if messagebox.askyesno(_("Fichier non conforme"),
+            message + _("\n\nEnregistrer un extrait ANONYMISÉ de ce fichier pour l'envoyer au développeur ? "
+                        "En-têtes, dates et heures sont conservés ; les valeurs de mesure sont remplacées par "
+                        "des nombres au hasard."),
             icon=messagebox.ERROR, parent=self.root,
         ):
-            return
+            self.save_anonymized_extract(path, self.root)
+
+    def save_anonymized_extract(self, path, parent) -> None:
+        """Extrait sans les mesures (structure du fichier seulement), à joindre à un ticket."""
+        path = Path(path)
         target = filedialog.asksaveasfilename(
-            parent=self.root, title=_("Enregistrer l'extrait"),
-            initialfile=_("{}_extrait.txt").format(path.stem), defaultextension=".txt",
+            parent=parent, title=_("Enregistrer l'extrait anonymisé"),
+            initialfile=_("{}_extrait_anonymise.txt").format(path.stem), defaultextension=".txt",
             filetypes=[("Texte", "*.txt")],
         )
-        if target:
+        if not target:
+            return
+        try:
+            write_anonymized_extract(path, target)
+        except Exception as exc:  # fichier illisible : extrait brut à défaut
+            log_error(traceback.format_exc())
             write_extract(path, target)
-            messagebox.showinfo(_("Extrait enregistré"), _("Extrait enregistré :\n{}").format(target), parent=self.root)
+            messagebox.showwarning(_("Extrait"), _("Extrait brut enregistré (anonymisation impossible : {}) :\n{}")
+                                   .format(exc, target), parent=parent)
+            return
+        messagebox.showinfo(_("Extrait anonymisé"), _("Extrait enregistré :\n{}\n\nIl ne contient pas vos "
+                                                     "mesures : vous pouvez le joindre au ticket.").format(target),
+                            parent=parent)
 
     def select_all(self, state: bool) -> None:
         if self.busy:

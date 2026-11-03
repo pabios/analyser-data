@@ -35,6 +35,7 @@ from .channels import (
 )
 from .excel import ExcelError, format_cell, is_excel, read_rows, sheet_names
 from .gbd import GbdError, is_gbd, read_gbd
+from .gbd import read_header as read_gbd_header
 from .i18n import _
 
 TIME_COL = "Time_min"
@@ -52,9 +53,10 @@ TABLE_SUFFIXES = {".json", ".parquet"}  # tableaux structurés, lus par pandas (
 SEPARATOR_NAMES = {"\t": "tabulation", ";": "point-virgule", ",": "virgule", "|": "barre verticale"}
 
 _TIME_NAME_RE = re.compile(
-    r"(time|temps|date|heure|hour|elapsed|dur[ée]e|horodat|timestamp|^t$)", re.IGNORECASE
+    r"(time|temps|date|heure|hour|elapsed|dur[ée]e|horodat|timestamp|^t$|datum|uhrzeit|zeit|fecha|hora|tiempo)",
+    re.IGNORECASE
 )
-_DATE_ONLY_NAME_RE = re.compile(r"^date$", re.IGNORECASE)
+_DATE_ONLY_NAME_RE = re.compile(r"^(date|datum|fecha)$", re.IGNORECASE)
 _SUBSECOND_NAME_RE = re.compile(r"^(ms|msec|us|µs)$", re.IGNORECASE)
 _SUBSECOND_FACTOR = {"ms": 1e-3, "msec": 1e-3, "us": 1e-6, "µs": 1e-6}
 # Valeurs hors échelle écrites par les centrales à la place d'un nombre.
@@ -777,6 +779,63 @@ def _diagnostic(lines: List[str], sep: str, n_cols: int, encoding: str) -> str:
     )
 
 
+def write_anonymized_extract(path, out_path, head_lines: int = 60, tail_lines: int = 10, seed: int = 0) -> Path:
+    """Extrait ANONYMISÉ : début et fin du fichier avec en-têtes, séparateurs, dates, heures,
+    colonne temps et format des nombres conservés ; valeurs de mesure remplacées par des nombres
+    aléatoires de même écriture. De quoi corriger un format sans divulguer de données."""
+    path, out_path = Path(path), Path(out_path)
+    rng = np.random.default_rng(seed)
+    if is_gbd(path):  # binaire Graphtec : seul l'en-tête texte (réglages), pas les mesures
+        _tree, _size, text = read_gbd_header(path)
+        out_path.write_text(_ANONYMIZED_NOTE + text, encoding="utf-8")
+        return out_path
+    encoding = _detect_encoding(path)
+    head, tail = _head_tail_lines(path, encoding)
+    lines = head[:head_lines] + (["[...]"] + tail[-tail_lines:] if len(head) > head_lines else [])
+    sep = max(SEPARATORS, key=lambda c: sum(line.count(c) for line in lines[-20:]))
+    rows = list(csv.reader(lines, delimiter=sep))  # guillemets respectés (« "12,34" » décimal)
+    data = [i for i, r in enumerate(rows) if sum(_is_value(c) for c in r) >= 2]
+    widths = Counter(len(rows[i]) for i in data)
+    width = widths.most_common(1)[0][0] if widths else 0
+    data = [i for i in data if len(rows[i]) == width]  # lignes de mesure (pas les réglages du préambule)
+    # Colonnes de temps conservées : nommées comme telles (Date, Time, ms, us…) ou croissantes
+    # (temps écoulé, compteurs) ; elles servent au diagnostic
+    keep = set()
+    for i in range(len(rows)):
+        if i not in data and len(rows[i]) == width:  # lignes d'en-tête (noms, unités)
+            keep |= {j for j, name in enumerate(rows[i])
+                     if _is_time_header(name.strip().strip('"')) or _INDEX_NAME_RE.match(name.strip().strip('"'))}
+    for j in range(width):
+        values = [_to_float(rows[i][j]) for i in data if j < len(rows[i])]
+        values = [v for v in values if v is not None]
+        if len(values) > 2 and all(b >= a for a, b in zip(values, values[1:])):
+            keep.add(j)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=sep, lineterminator="\n")
+    for i, r in enumerate(rows):
+        if i in data:
+            r = [c if j in keep or not _NUMBER_RE.match(_compact(c)) else _scramble(c, rng) for j, c in enumerate(r)]
+        writer.writerow(r)
+    out_path.write_text(_ANONYMIZED_NOTE + buffer.getvalue(), encoding="utf-8")
+    return out_path
+
+
+_ANONYMIZED_NOTE = ("# Extrait anonymisé par Analyser DATA : valeurs de mesure remplacées par des nombres aléatoires "
+                    "de même écriture ; en-têtes, dates, heures et colonne temps conservés.\n")
+
+
+def _to_float(cell: str) -> Optional[float]:
+    try:
+        return float(_compact(cell).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _scramble(cell: str, rng) -> str:
+    """Chiffres remplacés au hasard, signe, séparateur décimal, espaces et longueur conservés."""
+    return re.sub(r"\d", lambda _m: str(rng.integers(0, 10)), cell)
+
+
 def write_extract(path, out_path, head_lines: int = 80, tail_lines: int = 10) -> Path:
     """Copie le début et la fin d'un fichier (octets bruts) : de quoi analyser son format."""
     path, out_path = Path(path), Path(out_path)
@@ -1190,11 +1249,12 @@ _DATETIME_FORMATS = (
 
 
 _DAYS_PREFIX_RE = re.compile(r"^(\d+)\s*(?:j|d|jours?|days?)\.?\s+|^(\d+)\.(?=\d{1,2}:)", re.IGNORECASE)
-_CLOCK_RE = re.compile(r"^(?:(\d+):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)$")
+_CLOCK_RE = re.compile(r"^(?:(\d+):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)(?::(\d{1,3}))?$")  # H:MM:SS(:mmm)
 _DURATION_LIKE_RE = re.compile(
     r"^\s*(\d+\s*(j|d|jours?|days?)\.?\s+\S"  # jours + heure
     r"|\d+\.\d{1,2}:\d{2}"  # 1.02:03:04
     r"|\d{1,3}:\d{2}[.,]\d+\s*$"  # MM:SS,f
+    r"|\d+:\d{2}:\d{2}:\d{1,3}\s*$"  # H:MM:SS:mmm
     r"|(\d+([.,]\d+)?\s*(ms|msec|s|sec|min|mn|h|hr)\s*)+$)", re.IGNORECASE)
 _UNIT_TOKEN_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(ms|msec|s|sec|secondes?|min|mn|minutes?|m|h|hr|heures?|hours?|j|d)\b",
                             re.IGNORECASE)
@@ -1216,7 +1276,8 @@ def _one_duration(text: str) -> float:
     clock = _CLOCK_RE.match(t)
     if clock:
         hours = float(clock.group(1)) if clock.group(1) else 0.0
-        return days * 86400 + hours * 3600 + float(clock.group(2)) * 60 + float(clock.group(3))
+        millis = float(clock.group(4)) / 1000 if clock.group(4) else 0.0
+        return days * 86400 + hours * 3600 + float(clock.group(2)) * 60 + float(clock.group(3)) + millis
     tokens = _UNIT_TOKEN_RE.findall(t)
     if tokens and re.fullmatch(r"(\s*\d+(?:\.\d+)?\s*[a-zé]+\s*)+", t):
         return days * 86400 + sum(float(v) * _UNIT_SECONDS[u.lower()] for v, u in tokens)
