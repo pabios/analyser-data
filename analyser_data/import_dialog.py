@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 from .excel import is_excel, sheet_names
+from .gbd import is_gbd
 from .i18n import _, get_setting, set_setting
 from .loader import SPACE, TIME_COL, LoadError
 from .plotting import format_hms
@@ -177,7 +178,9 @@ class ImportDialog(tk.Toplevel):
         path = Path(key)
         for widget in (self.sheet_label, self.sheet_box, self.sep_label, self.sep_box):
             widget.pack_forget()
-        if is_excel(path):
+        if is_gbd(path):
+            pass  # binaire Graphtec : ni feuille ni séparateur à choisir
+        elif is_excel(path):
             self.sheet_label.pack(side=tk.LEFT, padx=(0, 6))
             self.sheet_box.pack(side=tk.LEFT)
             names = self.sheets.get(key, [])
@@ -201,8 +204,12 @@ class ImportDialog(tk.Toplevel):
             self.table.configure(columns=())
             return
         m = result
-        separator = _("Excel, feuille « {} »").format(m.sheet) if m.sheet else \
-            _("séparateur {}").format(_(SEPARATOR_NAMES.get(m.separator, m.separator)))
+        if m.sheet:
+            separator = _("Excel, feuille « {} »").format(m.sheet)
+        elif m.separator == "GBD":
+            separator = _("fichier natif Graphtec .GBD")
+        else:
+            separator = _("séparateur {}").format(_(SEPARATOR_NAMES.get(m.separator, m.separator)))
         lines = [_("{} · {} · {} voie(s) · {} lignes · période {}").format(
             _(m.source), separator, len(m.channels), "{:,}".format(len(m.data)).replace(",", " "), m.period_label)]
         # Durée totale bien visible (issue #15) : à comparer avec la durée réelle de l'essai

@@ -466,4 +466,15 @@ EN = {
     'Lecture de {}…': 'Reading {}…',
     'Lecture de « {} » impossible : module manquant ({}).': 'Cannot read “{}”: missing module ({}).',
     "« {} » est un fichier de données géographiques (SIG : carte, couches, coordonnées), pas un enregistrement de mesures dans le temps : il n'est pas pris en charge. Pour un fichier Graphtec natif (.GBD), exportez-le en CSV depuis l'appareil ou son logiciel.": '“{}” is a geographic data file (GIS: map, layers, coordinates), not a recording of measurements over time: it is not supported. For a native Graphtec file (.GBD), export it as CSV from the device or its software.',
+    # Fichiers Graphtec .GBD (issue #16)
+    'fichier natif Graphtec .GBD': 'native Graphtec .GBD file',
+    'Décodage du fichier Graphtec {}…': 'Decoding the Graphtec file {}…',
+    "Lu directement depuis le fichier natif Graphtec .GBD (lecture à vérifier une première fois avec l'export CSV de l'appareil).": "Read directly from the native Graphtec .GBD file (check once against the device's CSV export).",
+    "« {} » n'est pas un fichier GBD Graphtec lisible (taille d'en-tête introuvable).": '“{}” is not a readable Graphtec GBD file (header size not found).',
+    'Colonne « {} » inconnue dans le fichier GBD.': 'Unknown column “{}” in the GBD file.',
+    "Période d'échantillonnage illisible dans l'en-tête GBD : « {} ».": 'Unreadable sampling period in the GBD header: “{}”.',
+    'En-tête GBD incomplet dans « {} » (Counts / Order introuvables).': 'Incomplete GBD header in “{}” (Counts / Order not found).',
+    'Le fichier GBD « {} » ne contient aucune mesure.': 'The GBD file “{}” contains no measurement.',
+    'Aucune voie analogique (CH…) dans le fichier GBD « {} ».': 'No analog channel (CH…) in the GBD file “{}”.',
+    'Fichier GBD incomplet : {} mesures annoncées, {} lues.': 'Incomplete GBD file: {} records stated, {} read.',
 }

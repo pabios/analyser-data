@@ -34,6 +34,7 @@ from .channels import (
     split_name_unit,
 )
 from .excel import ExcelError, format_cell, is_excel, read_rows, sheet_names
+from .gbd import GbdError, is_gbd, read_gbd
 from .i18n import _
 
 TIME_COL = "Time_min"
@@ -173,6 +174,8 @@ def load_measurement(
                               "pas un enregistrement de mesures dans le temps : il n'est pas pris en charge. Pour "
                               "un fichier Graphtec natif (.GBD), exportez-le en CSV depuis l'appareil ou son "
                               "logiciel.").format(path.name))
+        if is_gbd(path):
+            return _load_gbd(path, name, progress)
         if suffix in TABLE_SUFFIXES:
             return _load_via_csv(path, name, progress, _table_rows(path, progress), "")
         if suffix in UNSUPPORTED_SUFFIXES:
@@ -293,6 +296,37 @@ def _load_via_csv(path: Path, name: str, progress, rows, sheet: str) -> Measurem
     m.path, m.sheet = path, sheet or ""
     if sheet is not None and not sheet:
         m.separator = SPACE
+    return m
+
+
+def _load_gbd(path: Path, name: str, progress) -> Measurement:
+    """Fichier natif Graphtec .GBD (issue #16) : décodé, écrit en CSV temporaire, puis lu comme
+    un export CSV de l'appareil (voies « Channel N », unités, période, contrôles)."""
+    progress(_("Décodage du fichier Graphtec {}…").format(path.name))
+    try:
+        frame, info = read_gbd(path)
+    except GbdError as exc:
+        raise LoadError(str(exc)) from exc
+    fd, temp = tempfile.mkstemp(suffix=".csv", prefix="analyser_data_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+            fh.write("Vendor;GRAPHTEC Corporation\nModel;{}\nSampling;{:g}ms\nTotal data points;{}\nData\n".format(
+                info["model"], info["period"] * 1000, info["counts"]))
+            header = ["Date&Time"] + ["{} [{}]".format(c, u) if u else c for c, u in zip(frame.columns[1:], info["units"])]
+            frame.to_csv(fh, sep=";", index=False, header=header, date_format="%Y-%m-%d %H:%M:%S.%f",
+                         float_format="%.10g", lineterminator="\n")
+        try:
+            m = _load(Path(temp), name, progress, ";")
+        except LoadError as exc:
+            raise LoadError(str(exc).replace(Path(temp).name, path.name)) from None
+    finally:
+        try:
+            os.remove(temp)
+        except OSError:
+            pass
+    m.path, m.source, m.separator = path, "Graphtec", "GBD"
+    m.warnings[:0] = [_("Lu directement depuis le fichier natif Graphtec .GBD (lecture à vérifier une première "
+                        "fois avec l'export CSV de l'appareil).")] + info["notes"]
     return m
 
 

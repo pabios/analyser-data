@@ -190,8 +190,12 @@ def test_unreadable_file_error_shows_diagnostic(tmp_path):
 
 
 def test_binary_export_is_explained(tmp_path):
-    f = tmp_path / "essai.GBD"
+    f = tmp_path / "essai.GBD"  # .GBD sans en-tête Graphtec : message clair (les vrais GBD sont lus)
     f.write_bytes(b"GBD\x00\x01\x02" * 100)
+    with pytest.raises(LoadError, match="GBD Graphtec lisible"):
+        load_measurement(f)
+    f = tmp_path / "essai.UHH"
+    f.write_bytes(b"UHH\x00\x01\x02" * 100)
     with pytest.raises(LoadError, match="binaire"):
         load_measurement(f)
 

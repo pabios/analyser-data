@@ -39,7 +39,8 @@ python main.py
 
 ## Utilisation
 
-1. **Ouvrir des fichiers…** : CSV, TXT, DAT, TSV, classeur **Excel** (XLSX, XLS), JSON ou Parquet. La fenêtre
+1. **Ouvrir des fichiers…** : CSV, TXT, DAT, TSV, classeur **Excel** (XLSX, XLS), JSON, Parquet ou
+   fichier natif **Graphtec .GBD**. La fenêtre
    **Import** montre comment chaque fichier est lu (temps, voies, premières lignes) ; on y
    choisit la feuille d'un classeur ou on impose le séparateur. Essayer le dossier `exemples/`.
 2. Cocher les voies à afficher (elles portent le nom de la centrale : « Channel 4 » ; légende
