@@ -363,7 +363,6 @@ EN = {
     'séparateur {}': 'separator {}',
     '{} fichier(s) importé(s) : {} voie(s) tracée(s).': '{} file(s) imported: {} channel(s) plotted.',
     '{} · {} · {} voie(s) · {} lignes · période {}': '{} · {} · {} channel(s) · {} rows · period {}',
-    "Le format « {} » du fichier « {} » n'est pas pris en charge. Formats acceptés : CSV, TXT, DAT (texte) et Excel XLSX, XLS.": 'The “{}” format of the file “{}” is not supported. Accepted formats: CSV, TXT, DAT (text) and Excel XLSX, XLS.',
     "Toujours afficher cet aperçu à l'ouverture": 'Always show this preview when opening files',
     "Vérifiez la lecture de chaque fichier (colonne temps, voies, premières lignes) avant de l'importer.": 'Check how each file is read (time column, channels, first rows) before importing it.',
     'Automatique': 'Automatic',
@@ -458,4 +457,13 @@ EN = {
     "Temps du fichier incohérent avec son en-tête (durée lue {}, annoncée {} = {} points × {}) : temps recalculé à partir de l'en-tête.": 'File time inconsistent with its header (duration read {}, stated {} = {} points × {}): time recomputed from the header.',
     'Durée : {}': 'Duration: {}',
     'Durée : {} (du {} au {})': 'Duration: {} (from {} to {})',
+    # Import universel (issue #16)
+    "Le format « {} » du fichier « {} » n'est pas pris en charge. Formats acceptés : CSV, TXT, DAT, TSV (texte), Excel XLSX, XLS, JSON et Parquet.": 'The “{}” format of the file “{}” is not supported. Accepted formats: CSV, TXT, DAT, TSV (text), Excel XLSX, XLS, JSON and Parquet.',
+    'Barre verticale « | »': 'Vertical bar “|”',
+    '« | »': '“|”',
+    'barre verticale': 'vertical bar',
+    "Le fichier « {} » n'est pas un tableau lisible : {}": 'The file “{}” is not a readable table: {}',
+    'Lecture de {}…': 'Reading {}…',
+    'Lecture de « {} » impossible : module manquant ({}).': 'Cannot read “{}”: missing module ({}).',
+    "« {} » est un fichier de données géographiques (SIG : carte, couches, coordonnées), pas un enregistrement de mesures dans le temps : il n'est pas pris en charge. Pour un fichier Graphtec natif (.GBD), exportez-le en CSV depuis l'appareil ou son logiciel.": '“{}” is a geographic data file (GIS: map, layers, coordinates), not a recording of measurements over time: it is not supported. For a native Graphtec file (.GBD), export it as CSV from the device or its software.',
 }

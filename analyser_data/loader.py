@@ -39,13 +39,16 @@ from .i18n import _
 TIME_COL = "Time_min"
 
 ENCODINGS = ("utf-8-sig", "cp1252", "latin-1")
-SEPARATORS = ("\t", ";", ",")  # par ordre de priorité ("," peut être un décimal)
+SEPARATORS = ("\t", ";", "|", ",")  # par ordre de priorité ("," peut être un décimal) ; « | » : issue #16
 SPACE = " "  # colonnes séparées par des espaces (choix manuel, ou en dernier recours)
 # Formats acceptés (issue #10) ; d'autres (PDF, Word…) sont refusés avec un message clair
 TEXT_SUFFIXES = {".csv", ".txt", ".dat", ".tsv", ".asc", ""}
 UNSUPPORTED_SUFFIXES = {".pdf", ".doc", ".docx", ".odt", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".zip",
                         ".rar", ".7z", ".exe", ".ods", ".mat", ".tdms"}
-SEPARATOR_NAMES = {"\t": "tabulation", ";": "point-virgule", ",": "virgule"}
+# Données géographiques (SIG) : cartes, pas des mesures dans le temps (issue #16)
+GIS_SUFFIXES = {".gdb", ".shp", ".geojson", ".gpkg", ".kml", ".kmz"}
+TABLE_SUFFIXES = {".json", ".parquet"}  # tableaux structurés, lus par pandas (issue #16)
+SEPARATOR_NAMES = {"\t": "tabulation", ";": "point-virgule", ",": "virgule", "|": "barre verticale"}
 
 _TIME_NAME_RE = re.compile(
     r"(time|temps|date|heure|hour|elapsed|dur[ée]e|horodat|timestamp|^t$)", re.IGNORECASE
@@ -165,9 +168,16 @@ def load_measurement(
     progress = progress or (lambda _msg: None)
     try:
         suffix = path.suffix.lower()
+        if suffix in GIS_SUFFIXES or path.is_dir() and suffix == ".gdb":
+            raise LoadError(_("« {} » est un fichier de données géographiques (SIG : carte, couches, coordonnées), "
+                              "pas un enregistrement de mesures dans le temps : il n'est pas pris en charge. Pour "
+                              "un fichier Graphtec natif (.GBD), exportez-le en CSV depuis l'appareil ou son "
+                              "logiciel.").format(path.name))
+        if suffix in TABLE_SUFFIXES:
+            return _load_via_csv(path, name, progress, _table_rows(path, progress), "")
         if suffix in UNSUPPORTED_SUFFIXES:
             raise LoadError(_("Le format « {} » du fichier « {} » n'est pas pris en charge. Formats acceptés : "
-                              "CSV, TXT, DAT (texte) et Excel XLSX, XLS.").format(suffix, path.name))
+                              "CSV, TXT, DAT, TSV (texte), Excel XLSX, XLS, JSON et Parquet.").format(suffix, path.name))
         if is_excel(path):
             return _load_excel(path, name, progress, sheet)
         if sep == SPACE:
@@ -284,6 +294,29 @@ def _load_via_csv(path: Path, name: str, progress, rows, sheet: str) -> Measurem
     if sheet is not None and not sheet:
         m.separator = SPACE
     return m
+
+
+def _table_rows(path: Path, progress):
+    """Fichier JSON (tableau d'objets ou de colonnes) ou Parquet -> en-têtes + lignes de texte."""
+    progress(_("Lecture de {}…").format(path.name))
+    try:
+        if path.suffix.lower() == ".parquet":
+            table = pd.read_parquet(path)
+        else:
+            try:
+                table = pd.read_json(path)
+            except ValueError:
+                table = pd.read_json(path, lines=True)  # un objet JSON par ligne
+    except ImportError as exc:
+        raise LoadError(_("Lecture de « {} » impossible : module manquant ({}).").format(path.name, exc)) from exc
+    except (ValueError, OSError) as exc:
+        raise LoadError(_("Le fichier « {} » n'est pas un tableau lisible : {}").format(path.name, exc)) from exc
+    if not isinstance(table, pd.DataFrame) or table.empty:
+        raise LoadError(_("Le fichier « {} » est vide.").format(path.name))
+    yield [str(c) for c in table.columns]
+    for row in table.itertuples(index=False):
+        yield [format_cell(v.to_pydatetime() if isinstance(v, pd.Timestamp) else
+                           (None if v is None or (isinstance(v, float) and v != v) else v)) for v in row]
 
 
 def _space_rows(path: Path):

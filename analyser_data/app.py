@@ -46,7 +46,8 @@ from .i18n import _, get_language, get_setting, load_language, set_language, set
 
 APP_TITLE = "Analyser DATA — MultiPlotter pour bancs d'essai"
 FILE_TYPES = [
-    ("Fichiers de mesure", "*.csv *.txt *.dat *.xlsx *.xlsm *.xls *.CSV *.TXT *.DAT *.XLSX *.XLS"),
+    ("Fichiers de mesure", "*.csv *.txt *.dat *.tsv *.xlsx *.xlsm *.xls *.json *.parquet "
+                           "*.CSV *.TXT *.DAT *.TSV *.XLSX *.XLS *.JSON"),
     ("Texte (CSV, TXT, DAT)", "*.csv *.txt *.dat *.CSV *.TXT *.DAT"),
     ("Classeurs Excel", "*.xlsx *.xlsm *.xls *.XLSX *.XLS"),
     ("Tous les fichiers", "*.*"),

@@ -32,9 +32,10 @@ SEPARATOR_CHOICES = {
     ";": "Point-virgule « ; »",
     ",": "Virgule « , »",
     "\t": "Tabulation",
+    "|": "Barre verticale « | »",
     SPACE: "Espaces",
 }
-SEPARATOR_NAMES = {";": "« ; »", ",": "« , »", "\t": "tabulation", SPACE: "espaces"}
+SEPARATOR_NAMES = {";": "« ; »", ",": "« , »", "\t": "tabulation", "|": "« | »", SPACE: "espaces"}
 PREVIEW_ROWS = 8
 SETTING = "import_preview"
 

@@ -12,7 +12,8 @@ from .theme import C
 SECTIONS = [
     ("Démarrer", "Démarrer", """\
 1. « Ouvrir des fichiers… » : choisissez un ou plusieurs exports (Graphtec, nanodac…) en
-   texte (CSV, TXT, DAT) ou en classeur Excel (XLSX, XLS). La fenêtre « Import » montre
+   texte (CSV, TXT, DAT, TSV), en classeur Excel (XLSX, XLS), en JSON ou en Parquet.
+   Séparateurs reconnus : « ; », « , », tabulation, « | » et espaces. La fenêtre « Import » montre
    comment chaque fichier est lu (colonne temps, voies, premières lignes) : choisissez la
    feuille d'un classeur, ou imposez le séparateur si la détection s'est trompée, puis
    « Importer ». Préférez le fichier d'origine de l'appareil (Excel coupe au-delà de
@@ -24,7 +25,8 @@ SECTIONS = [
 4. Langue : liste « FR / EN » en haut à droite (choix mémorisé).""",
      "Getting started", """\
 1. “Open files…”: choose one or more exports (Graphtec, nanodac…) as text (CSV, TXT,
-   DAT) or Excel workbooks (XLSX, XLS). The “Import” window shows how each file is read
+   DAT, TSV), Excel workbooks (XLSX, XLS), JSON or Parquet. Separators recognised: “;”,
+   “,”, tab, “|” and spaces. The “Import” window shows how each file is read
    (time column, channels, first rows): choose a workbook's sheet, or force the
    separator if detection went wrong, then “Import”. Prefer the device's original file
    (Excel truncates beyond 1,048,576 rows).
