@@ -321,7 +321,8 @@ def main():
     assert "I_EOM" in gui.lbl_shifted.cget("text")
     for t in gui.plot._traces.values():  # point tracé = temps enregistré - 4 min pour les voies choisies
         if t.shiftable:
-            assert np.allclose(t.line.get_xdata() - t.x[t.index], -4.0)
+            keep = t.index >= 0  # -1 : coupure d'enregistrement
+            assert np.allclose(t.line.get_xdata()[keep] - t.x[t.index[keep]], -4.0)
     shot(root, "23_carte_enceinte.png")
     gui.apply_shifted_channels(None)
     gui._set_offset(0.0)

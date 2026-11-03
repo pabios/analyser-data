@@ -152,3 +152,23 @@ def test_real_recording_gap_is_reported(tmp_path):
     m = load_measurement(_write(tmp_path, "clim.csv", lines))
     notes = [w for w in m.warnings if "Interruption" in w]
     assert len(notes) == 1 and "0:45:00" in notes[0] and "29/10/2026 18:59:00" in notes[0]
+
+
+def test_plot_is_cut_where_the_recording_stops():
+    """Capture du client (issue #16) : palier bruité puis long trait droit jusqu'au point suivant,
+    bien plus tard. La courbe doit être coupée (pas de trait droit inventé)."""
+    from matplotlib.figure import Figure
+
+    from analyser_data.plotting import PlotManager, PlotSeries
+
+    x = np.r_[np.arange(0, 120, 0.1), 165 + np.arange(0, 5, 0.1)]  # minutes : trou de 45 min
+    y = np.r_[60 + np.random.default_rng(0).normal(0, 0.2, 1200), np.full(50, 25.0)]
+    plot = PlotManager(Figure())
+    plot.draw([PlotSeries(gid="0", label="T", x=x, y=y, unit="°C", quantity="température", key=("f", "T"))])
+    line = plot.axes["main"].get_lines()[0]
+    xs, ys = line.get_xdata(), line.get_ydata()
+    k = int(np.flatnonzero(np.isnan(ys))[0])
+    assert xs[k - 1] == pytest.approx(119.9) and xs[k + 1] == pytest.approx(165)  # coupure entre les deux
+    assert plot.original_index("0", k + 1) == 1200 and plot.original_index("0", k - 1) == 1199  # clic juste
+    plot.axes["main"].set_xlim(100, 170)  # zoom : coupure conservée
+    assert np.isnan(line.get_ydata()).sum() == 1

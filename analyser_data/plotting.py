@@ -237,7 +237,20 @@ class _Trace:
         self.x = np.asarray(x, dtype=float)
         self.y = np.asarray(y, dtype=float)
         self.shiftable = shiftable
-        self.index = np.arange(0)
+        self.index = np.arange(0)  # indice d'origine de chaque point tracé (-1 : coupure)
+        self.gaps = _gaps(self.x)
+
+
+def _gaps(x: np.ndarray) -> np.ndarray:
+    """Indices i après lesquels l'enregistrement s'interrompt (x[i+1] - x[i] > 10 périodes) :
+    la courbe y est coupée au lieu d'un long trait droit trompeur (issue #16)."""
+    if len(x) < 3:
+        return np.zeros(0, dtype=np.int64)
+    diffs = np.diff(x)
+    positive = diffs[diffs > 0]
+    if not len(positive):
+        return np.zeros(0, dtype=np.int64)
+    return np.flatnonzero(diffs > 10 * float(np.median(positive)))
 
 
 class PlotManager:
@@ -446,8 +459,18 @@ class PlotManager:
             start = max(0, int(np.searchsorted(trace.x, view[0] - offset)) - 1)
             stop = min(n, int(np.searchsorted(trace.x, view[1] - offset)) + 1)
         y = np.abs(trace.y) if trace.absolute else trace.y
-        trace.index = decimate_indices(y, start, max(start, stop))
-        trace.line.set_data(trace.x[trace.index] + offset, y[trace.index])
+        index = decimate_indices(y, start, max(start, stop))
+        xs, ys = trace.x[index] + offset, y[index]
+        gaps = trace.gaps[(trace.gaps >= start) & (trace.gaps < max(start, stop) - 1)]
+        if len(gaps):
+            # Interruption de l'enregistrement : les deux bords sont tracés, puis une coupure (NaN)
+            index = np.unique(np.concatenate([index, gaps, gaps + 1]))
+            cut = np.searchsorted(index, gaps, side="right")
+            xs = np.insert(trace.x[index] + offset, cut, np.nan)
+            ys = np.insert(y[index], cut, np.nan)
+            index = np.insert(index, cut, -1)
+        trace.index = index
+        trace.line.set_data(xs, ys)
 
     def _format_coord(self, x, y):
         t = _("{:.2f} %").format(x) if self.percent_axis else format_hms(x)
