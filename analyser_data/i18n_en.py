@@ -487,4 +487,6 @@ EN = {
     'Extrait anonymisé': 'Anonymised excerpt',
     'Extrait anonymisé…': 'Anonymised excerpt…',
     'Extrait enregistré :\n{}\n\nIl ne contient pas vos mesures : vous pouvez le joindre au ticket.': 'Excerpt saved:\n{}\n\nIt does not contain your measurements: you can attach it to the ticket.',
+    "Interruption de l'enregistrement : aucune mesure pendant {} après {} (le fichier ne contient pas de données à cet endroit).": 'Recording interruption: no measurement for {} after {} (the file contains no data there).',
+    '… et {} autre(s) interruption(s).': '… and {} other interruption(s).',
 }

@@ -122,3 +122,33 @@ def test_unreadable_time_shows_the_values_read(tmp_path):
     lines = ["Temps;Température (°C);Humidité (%HR)"] + ["étape {};21,5;45,0".format(k) for k in range(50)]
     with pytest.raises(LoadError, match="Valeurs lues : « étape 0 »"):
         load_measurement(_write(tmp_path, "chaud initial.csv", lines))
+
+
+def test_mixed_datetime_writings_do_not_make_a_hole(tmp_path):
+    """Issue #16 (« coupure du temps ») : secondes avec / sans décimales mêlées, minuit écrit sans
+    l'heure (Excel) : ces lignes étaient perdues -> trou dans la courbe."""
+    t = pd.Timestamp("2026-10-29 23:50:00") + pd.to_timedelta(np.arange(1500) * 1.0, unit="s")
+    cells = []
+    for k, x in enumerate(t):
+        if x.hour == 0 and x.minute == 0 and x.second == 0:
+            cells.append(x.strftime("%d/%m/%Y"))  # Excel : minuit sans l'heure
+        elif 600 <= k < 900:
+            cells.append(x.strftime("%d/%m/%Y %H:%M:%S") + ",0")  # avec décimales
+        else:
+            cells.append(x.strftime("%d/%m/%Y %H:%M:%S"))
+    lines = ["Date/Heure;Température (°C);Humidité (%HR)"] + ["{};21,5;45,0".format(c) for c in cells]
+    m = load_measurement(_write(tmp_path, "clim.csv", lines))
+    assert len(m.data) == 1500
+    assert m.duration_min == pytest.approx(1499 / 60)
+    assert np.diff(m.data[TIME_COL].to_numpy()).max() == pytest.approx(1 / 60)  # aucun trou
+    assert not any("Interruption" in w for w in m.warnings)
+
+
+def test_real_recording_gap_is_reported(tmp_path):
+    t = pd.Timestamp("2026-10-29 09:00:00") + pd.to_timedelta(np.arange(600) * 60.0, unit="s")
+    t = t.append(t[-1] + pd.Timedelta(minutes=45) + pd.to_timedelta(np.arange(100) * 60.0, unit="s"))
+    lines = ["Date/Heure;Température (°C);Humidité (%HR)"] + ["{};21,5;45,0".format(x.strftime("%d/%m/%Y %H:%M:%S"))
+                                                               for x in t]
+    m = load_measurement(_write(tmp_path, "clim.csv", lines))
+    notes = [w for w in m.warnings if "Interruption" in w]
+    assert len(notes) == 1 and "0:45:00" in notes[0] and "29/10/2026 18:59:00" in notes[0]

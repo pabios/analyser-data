@@ -529,6 +529,7 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
         df = df.sort_values("_t", kind="mergesort")
         msgs.append(_("Points remis dans l'ordre chronologique."))
     df = df.reset_index(drop=True)
+    msgs += _gap_notes(df["_t"].to_numpy(dtype=float), start)
 
     elapsed_min = (df.pop("_t").to_numpy(dtype=float)) / 60.0
     df.insert(0, TIME_COL, elapsed_min.copy())
@@ -1317,12 +1318,46 @@ def _to_datetime(s: pd.Series) -> pd.Series:
             pd.to_datetime(sample, format=fmt)
         except (ValueError, TypeError):
             continue
-        return pd.to_datetime(s, format=fmt, errors="coerce")
+        parsed = pd.to_datetime(s, format=fmt, errors="coerce")
+        # Écritures mêlées dans le fichier (« …:10 » puis « …:10,5 », minuit écrit sans l'heure
+        # par Excel…) : ces lignes ne doivent pas disparaître et faire un trou (issue #16)
+        missing = parsed.isna() & (s != "")
+        if missing.any():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    parsed[missing] = pd.to_datetime(s[missing], format="mixed", dayfirst=fmt.startswith("%d"),
+                                                     errors="coerce")
+                except (TypeError, ValueError):  # pragma: no cover - pandas < 2.0
+                    parsed[missing] = pd.to_datetime(s[missing], dayfirst=fmt.startswith("%d"), errors="coerce")
+        return parsed
     # Format inhabituel : détection automatique (plus lente)
     first_value = sample.iloc[0] if len(sample) else ""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return pd.to_datetime(s, dayfirst=not _YEAR_FIRST_RE.match(first_value), errors="coerce")
+
+
+def _gap_notes(seconds: np.ndarray, start: Optional[pd.Timestamp], limit: int = 3) -> List[str]:
+    """Interruptions de l'enregistrement (aucune mesure pendant plus de 10 périodes et 1 min),
+    signalées pour distinguer un vrai trou du fichier d'une erreur de lecture (issue #16)."""
+    finite = seconds[np.isfinite(seconds)]
+    if len(finite) < 3:
+        return []
+    diffs = np.diff(finite)
+    period = float(np.median(diffs[diffs > 0])) if (diffs > 0).any() else 0.0
+    if period <= 0:
+        return []
+    gaps = np.flatnonzero(diffs > max(10 * period, 60.0))
+    notes = []
+    for i in gaps[:limit]:
+        at = (start + pd.Timedelta(seconds=float(finite[i]))).strftime("%d/%m/%Y %H:%M:%S") if start is not None \
+            else _hms(float(finite[i]))
+        notes.append(_("Interruption de l'enregistrement : aucune mesure pendant {} après {} (le fichier ne "
+                       "contient pas de données à cet endroit).").format(_hms(float(diffs[i])), at))
+    if len(gaps) > limit:
+        notes.append(_("… et {} autre(s) interruption(s).").format(len(gaps) - limit))
+    return notes
 
 
 def _sampling_period(seconds: np.ndarray) -> float:
