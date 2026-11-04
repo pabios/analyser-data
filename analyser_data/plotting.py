@@ -224,7 +224,20 @@ def decimate_indices(y: np.ndarray, start: int, stop: int, buckets: int = MAX_BU
     idx = np.empty(2 * buckets, dtype=np.int64)
     idx[0::2] = base + np.minimum(lo, hi)
     idx[1::2] = base + np.maximum(lo, hi)
-    return np.unique(np.concatenate(([start], idx, [stop - 1])))
+    # Reste après la dernière tranche complète (jusqu'à « buckets » points) : il était oublié,
+    # d'où un trait droit jusqu'au dernier point en fin d'essai (issue #16, essai de 73 h)
+    rest = np.zeros(0, dtype=np.int64)
+    if start + used < stop:  # découpé en tranches de même taille que les autres
+        tail = y[start + used:stop]
+        pad = (-len(tail)) % size
+        block = np.concatenate([tail, np.full(pad, np.nan)]).reshape(-1, size)
+        empty = np.isnan(block)
+        t_lo = np.where(empty, np.inf, block).argmin(axis=1)
+        t_hi = np.where(empty, -np.inf, block).argmax(axis=1)
+        t_base = start + used + np.arange(len(block)) * size
+        rest = np.concatenate([t_base + t_lo, t_base + t_hi])
+        rest = rest[rest < stop]
+    return np.unique(np.concatenate(([start], idx, rest, [stop - 1]))).astype(np.int64)
 
 
 class _Trace:

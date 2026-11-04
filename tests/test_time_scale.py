@@ -172,3 +172,36 @@ def test_plot_is_cut_where_the_recording_stops():
     assert plot.original_index("0", k + 1) == 1200 and plot.original_index("0", k - 1) == 1199  # clic juste
     plot.axes["main"].set_xlim(100, 170)  # zoom : coupure conservée
     assert np.isnan(line.get_ydata()).sum() == 1
+
+
+@pytest.mark.parametrize("fmt, start", [
+    ("%m/%d/%Y %I:%M:%S %p", "2026-10-30 18:00"),  # fin octobre -> novembre (cas du client)
+    ("%m/%d/%Y %H:%M:%S", "2026-11-01 08:00"),  # US entièrement du 1er au 4 : ambigu
+    ("%d/%m/%Y %H:%M:%S", "2026-11-01 08:00"),  # FR ambigu : jour en tête
+    ("%d/%m/%Y %H:%M:%S", "2026-10-30 18:00"),
+])
+def test_long_test_across_months_keeps_its_duration(tmp_path, fmt, start):
+    """Issue #16 : essai de 74 h « coupé » — dates américaines (mois/jour) lues jour/mois dès que
+    le jour passait sous 13 : points envoyés des mois plus tard (traits droits sur le graphique)."""
+    t = pd.Timestamp(start) + pd.to_timedelta(np.arange(0, 74 * 3600, 60), unit="s")
+    lines = ["Time,Temp PV (C),Humi PV (%RH)"] + ["{},{:.2f},{:.1f}".format(x.strftime(fmt), 60 + (k % 7) / 10,
+                                                                            85 + (k % 5) / 10) for k, x in enumerate(t)]
+    m = load_measurement(_write(tmp_path, "enceinte.csv", lines))
+    assert m.duration_min / 60 == pytest.approx(74, abs=0.02)
+    assert m.start == pd.Timestamp(start)
+    assert not any("Interruption" in w or "ordre chronologique" in w for w in m.warnings)
+    assert [c.unit for c in m.channels] == ["°C", "°C", "%HR"][:len(m.channels)] or len(m.channels) == 2
+
+
+@pytest.mark.parametrize("n", [4440, 4001, 1_718_363, 10_007])
+def test_decimation_never_drops_the_end_of_the_curve(n):
+    """Issue #16 : au-delà de 4 000 points, les points après la dernière tranche complète étaient
+    oubliés (jusqu'à 1 999) -> trait droit jusqu'au dernier point en fin d'essai."""
+    from analyser_data.plotting import decimate_indices
+
+    y = np.sin(np.arange(n) / 37.0)
+    idx = decimate_indices(y, 0, n)
+    assert idx[0] == 0 and idx[-1] == n - 1 and np.all(np.diff(idx) > 0)
+    # aucun intervalle tracé plus long que deux tranches : la fin est aussi détaillée que le reste
+    size = n // 2000
+    assert np.diff(idx).max() <= 2 * size

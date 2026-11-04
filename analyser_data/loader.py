@@ -1311,9 +1311,57 @@ def _unwrap_midnight(seconds: np.ndarray) -> np.ndarray:
     return out
 
 
+_US_DATETIME_FORMATS = (
+    "%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %I:%M %p", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S.%f",
+    "%m/%d/%Y %H:%M", "%m/%d/%y %I:%M:%S %p", "%m/%d/%y %H:%M:%S", "%m-%d-%Y %H:%M:%S",
+)
+_DAY_MONTH_RE = re.compile(r"^\s*(\d{1,2})[/.\-](\d{1,2})[/.\-]\d{2,4}")
+
+
+def _date_order(s: pd.Series) -> Optional[str]:
+    """Ordre jour / mois des dates « 01/11/2026 » d'après TOUTE la colonne (issue #16) : un 1er
+    nombre > 12 -> jour en tête ; un 2e nombre > 12 -> mois en tête (dates américaines). Les
+    seules premières lignes ne suffisent pas : un essai du 30/10 au 02/11 change de mois."""
+    filled = s[s != ""]
+    step = max(1, len(filled) // 5000)
+    firsts, seconds = [], []
+    for value in filled.iloc[::step]:
+        match = _DAY_MONTH_RE.match(value)
+        if match:
+            firsts.append(int(match.group(1)))
+            seconds.append(int(match.group(2)))
+    if not firsts:
+        return None
+    if max(firsts) > 12 >= max(seconds):
+        return "day"
+    if max(seconds) > 12 >= max(firsts):
+        return "month"
+    if len(set(zip(firsts, seconds))) > 1:  # plusieurs dates différentes (sinon : rien à départager)
+        # Ambigu (ex. du 01/11 au 04/11) : la lecture qui donne le temps le plus régulier
+        # (pas de saut de plusieurs mois entre deux lignes) l'emporte ; à égalité, jour en tête
+        values = filled.iloc[::step]
+        jumps = {}
+        for order, dayfirst in (("day", True), ("month", False)):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                parsed = pd.to_datetime(values, dayfirst=dayfirst, errors="coerce", format="mixed")
+            seconds_ = parsed.dropna().astype("int64").to_numpy() / 1e9
+            jumps[order] = float(np.abs(np.diff(seconds_)).max()) if len(seconds_) > 1 else 0.0
+        return "month" if jumps["month"] < 0.5 * jumps["day"] else None
+    return None
+
+
 def _to_datetime(s: pd.Series) -> pd.Series:
     sample = s[s != ""].head(50)
-    for fmt in _DATETIME_FORMATS:
+    order = _date_order(s)
+    formats = _US_DATETIME_FORMATS + _DATETIME_FORMATS if order == "month" else _DATETIME_FORMATS
+    if order == "month" or any(re.search(r"\b[AP]M\b", v, re.IGNORECASE) for v in sample):
+        formats = formats + _US_DATETIME_FORMATS if order != "month" else formats
+    for fmt in formats:
+        if order == "month" and fmt.startswith("%d"):
+            continue  # dates américaines prouvées : jamais jour en tête
+        if order == "day" and fmt.startswith("%m"):
+            continue
         try:
             pd.to_datetime(sample, format=fmt)
         except (ValueError, TypeError):
@@ -1326,16 +1374,17 @@ def _to_datetime(s: pd.Series) -> pd.Series:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 try:
-                    parsed[missing] = pd.to_datetime(s[missing], format="mixed", dayfirst=fmt.startswith("%d"),
-                                                     errors="coerce")
+                    parsed[missing] = pd.to_datetime(s[missing], format="mixed", dayfirst=order != "month"
+                                                     and not fmt.startswith("%m"), errors="coerce")
                 except (TypeError, ValueError):  # pragma: no cover - pandas < 2.0
-                    parsed[missing] = pd.to_datetime(s[missing], dayfirst=fmt.startswith("%d"), errors="coerce")
+                    parsed[missing] = pd.to_datetime(s[missing], dayfirst=order != "month", errors="coerce")
         return parsed
     # Format inhabituel : détection automatique (plus lente)
     first_value = sample.iloc[0] if len(sample) else ""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return pd.to_datetime(s, dayfirst=not _YEAR_FIRST_RE.match(first_value), errors="coerce")
+        return pd.to_datetime(s, dayfirst=order != "month" and not _YEAR_FIRST_RE.match(first_value),
+                              errors="coerce")
 
 
 def _gap_notes(seconds: np.ndarray, start: Optional[pd.Timestamp], limit: int = 3) -> List[str]:
