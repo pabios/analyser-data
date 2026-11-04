@@ -45,6 +45,9 @@ python main.py
    choisit la feuille d'un classeur ou on impose le séparateur. Essayer le dossier `exemples/`.
 2. Cocher les voies à afficher (elles portent le nom de la centrale : « Channel 4 » ; légende
    « Channel 4 (A) », température « Température ambiante » en rouge).
+   Bouton **Moyenne…** : moyenne point par point de deux voies (ou plus) de même unité,
+   ajoutée comme une voie de plus (« Moyenne Channel 4 / Channel 5 (A) ») ; voie calculée,
+   les mesures d'origine ne changent pas.
 3. **Nettoyer…** : supprime les pics parasites (quelle que soit leur hauteur) et **lisse le bruit
    sans changer le niveau mesuré** (les créneaux restent verticaux, rien n'est mis à 0). En option :
    forcer le repos à 0 sous un seuil calculé sur les données, corriger un décalage de zéro. La

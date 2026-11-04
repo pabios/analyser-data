@@ -120,6 +120,31 @@ Left-click a damaged point: it is replaced by the interpolation of its two
 neighbours. First disable the zoom / pan tool of the toolbar (pressed button = the
 click zooms). Zoom in to target a precise point."""),
 
+    ("Moyenne de voies", "Moyenne de voies", """\
+Bouton « Moyenne… » de la carte « Voies de mesure » : cochez au moins deux voies de
+même unité (ex. Channel 4 et Channel 5 en A, ou deux sondes °C) puis « Afficher la
+moyenne ». Une voie « Moyenne Channel 4 / Channel 5 (A) » s'ajoute sous le fichier :
+elle se coche, s'affiche, s'exporte et entre dans le rapport comme les autres.
+C'est une voie calculée, point par point : les mesures d'origine ne changent pas. Elle
+reprend les valeurs affichées de ses voies (nettoyage et corrections compris) et se
+recalcule quand elles changent ; elle ne se nettoie pas et ne se corrige pas au clic
+elle-même. Si une voie manque à un instant, il n'y a pas de moyenne à cet instant.
+Voies de deux fichiers : celles du second sont interpolées sur les instants du premier,
+jamais à travers une interruption d'enregistrement. « Retirer » (même fenêtre) la
+supprime ; le journal garde la trace.""",
+     "Channel average", """\
+“Average…” button of the “Channels” card: tick at least two channels with the same unit
+(e.g. Channel 4 and Channel 5 in A, or two °C probes) then “Show the average”. A channel
+“Average Channel 4 / Channel 5 (A)” is added under the file: it can be ticked, shown,
+exported and reported like the others.
+It is a calculated channel, point by point: the original measurements do not change. It
+uses the displayed values of its channels (cleaning and corrections included) and is
+recalculated when they change; it is not cleaned or click-corrected itself. If a channel
+is missing at an instant, there is no average at that instant.
+Channels from two files: those of the second are interpolated onto the timestamps of the
+first, never across a recording interruption. “Remove” (same window) deletes it; the log
+keeps a record."""),
+
     ("Axes et courbes", "Axes et courbes", """\
 Bouton « Modifier les axes et les courbes » de la barre d'outils (icône de courbe, à
 gauche de la disquette) :

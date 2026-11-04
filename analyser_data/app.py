@@ -33,6 +33,7 @@ from .editing import ClickCorrector
 from .export import Key
 from .help import HelpWindow
 from .import_dialog import ImportDialog, needs_dialog, preview_enabled
+from .averages_dialog import AveragesDialog
 from .corrections_dialog import ProbeCorrectionsDialog, ShiftedChannelsDialog
 from .cycles_dialog import CyclesDialog
 from .loader import write_anonymized_extract, write_extract
@@ -197,6 +198,9 @@ class AnalyserDataApp:
                    command=lambda: self.select_all(True)).pack(side=tk.LEFT)
         ttk.Button(row, text=_("Tout décocher"), style="Small.TButton",
                    command=lambda: self.select_all(False)).pack(side=tk.LEFT, padx=(6, 0))
+        # Issue #16 : moyenne de deux voies (ou plus), affichée comme une voie de plus
+        ttk.Button(row, text=_("Moyenne…"), style="Small.TButton",
+                   command=self.open_averages).pack(side=tk.RIGHT)
         tree_frame = ttk.Frame(box, style="Card.TFrame")
         tree_frame.pack(fill=tk.BOTH, expand=True)
         self.tree = ttk.Treeview(tree_frame, selectmode="none", height=11, show="tree")
@@ -528,8 +532,31 @@ class AnalyserDataApp:
         self.plot_settings.clear_limits()
         self.redraw()
 
+    def open_averages(self) -> None:
+        if self.busy:
+            return
+        if not self.session.measurements:
+            messagebox.showinfo(_("Moyenne de voies"), _("Ouvrez d'abord des fichiers de mesure."), parent=self.root)
+            return
+        AveragesDialog(self, [k for k in self.selected_keys() if not self.session.is_average(k)])
+
+    def add_average(self, keys) -> None:
+        """Ajoute la voie « Moyenne … » des voies choisies et l'affiche. ValueError si impossible."""
+        key = self.session.add_average(keys)
+        self._checked[key] = True
+        self._rebuild_tree()
+        self._redraw_with_view(self.plot.current_view())
+        self._set_status(_("Moyenne affichée : {} (voie calculée, mesures inchangées).").format(key[1]))
+
+    def remove_average(self, key) -> None:
+        self.session.remove_average(key)
+        self._checked.pop(key, None)
+        self._rebuild_tree()
+        self._redraw_with_view(self.plot.current_view())
+        self._set_status(_("Moyenne retirée : {}.").format(key[1]))
+
     def clean_selected(self) -> None:
-        keys = self.selected_keys()
+        keys = [k for k in self.selected_keys() if not self.session.is_average(k)]
         if not keys:
             messagebox.showinfo(_("Nettoyage"), _("Cochez au moins une voie."), parent=self.root)
             return
@@ -1023,9 +1050,16 @@ class AnalyserDataApp:
         key = self._gid_key.get(gid)
         if key is None:
             return
+        if self.session.is_average(key):
+            self._set_status(_("« {} » est calculée : corrigez plutôt les voies dont elle fait la moyenne.")
+                             .format(key[1]))
+            return
         index = self.plot.original_index(gid, plotted_index)
         value = self.session.correct_point(key, index)
-        self.plot.update_data(gid, self.session.displayed_values(key))
+        if any(key in sources for sources in self.session.averages.values()):
+            self._redraw_with_view(self.plot.current_view())  # la moyenne suit la correction
+        else:
+            self.plot.update_data(gid, self.session.displayed_values(key))
         self._set_status(_("Point corrigé : {} [{}], indice {} → {:.6g}").format(
             key[1], key[0], index, value + self.session.value_offset(key)))
 

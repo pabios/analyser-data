@@ -394,6 +394,31 @@ def main():
     axes_dialog.destroy()
     print("température seule : OK")
 
+    # Issue #16 : moyenne de deux voies, affichée comme une voie de plus
+    from analyser_data.averages_dialog import AveragesDialog
+    gl = next(n for n in gui.session.measurements if n.startswith("GL980"))
+    for k in gui._checked:
+        gui._checked[k] = k in ((gl, "Channel 4"), (gl, "Channel 5"))
+    gui._refresh_checkmarks()
+    gui.redraw()
+    pump(root)
+    chooser = AveragesDialog(gui, gui.selected_keys())
+    pump(root)
+    shot_window(chooser, "29_moyenne_choix.png")
+    chooser.apply()
+    pump(root)
+    key = (gl, "Moyenne Channel 4 / Channel 5 (A)")
+    assert gui._checked.get(key) and key in gui.session.all_keys()
+    assert any(t.get_text() == key[1] for t in gui.figure.legends[0].get_texts()), "moyenne absente de la légende"
+    shot(root, "30_moyenne_affichee.png")
+    chooser = AveragesDialog(gui)
+    pump(root)
+    shot_window(chooser, "31_moyenne_retirer.png")
+    chooser.remove(key)
+    pump(root)
+    assert key not in gui.session.all_keys()
+    print("moyenne de voies : OK")
+
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
     shot_window(help_window, "12_aide.png")
     help_window.destroy()

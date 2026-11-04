@@ -39,7 +39,7 @@ class ProbeCorrectionsDialog(tk.Toplevel):
         outer.pack(fill=tk.BOTH, expand=True)
         self.vars: Dict[Key, tk.StringVar] = {}
         probes = [(m.name, ch) for m in session.measurements.values() for ch in m.channels
-                  if ch.quantity in (TEMPERATURE, HUMIDITY)]
+                  if ch.quantity in (TEMPERATURE, HUMIDITY) and not session.is_average((m.name, ch.label))]
         if not probes:
             ttk.Label(box, text=_("Aucune voie de température ou d'humidité dans les fichiers ouverts."),
                       style="Card.TLabel").pack(anchor=tk.W)

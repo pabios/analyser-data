@@ -20,7 +20,7 @@ from .cleaning import (
 from .editing import interpolate_at
 from .export import Key, merge_selection, write_csv
 from .loader import TIME_COL, LoadError, Measurement, align_time_axes, load_measurement
-from .channels import HUMIDITY, TEMPERATURE, Channel
+from .channels import HUMIDITY, OTHER, TEMPERATURE, Channel
 from .cycles import Cycle, Edit, assemble, assemble_time, detect_cycles, fundamental, plan, spectral_f0, synthetic_mask
 from .plotting import PlotSeries, format_hms
 from .i18n import _, get_language
@@ -94,6 +94,8 @@ class Session:
         self.synthetic: Dict[str, np.ndarray] = {}
         self._cycle_undo: Dict[str, List[tuple]] = {}
         self._cycle_order: List[str] = []  # fichiers modifiés, du plus ancien au plus récent
+        # Moyennes de voies (issue #16) : voie calculée (fichier hôte, libellé) -> voies moyennées
+        self.averages: "OrderedDict[Key, List[Key]]" = OrderedDict()
 
     # ------------------------------------------------------------------ journal
 
@@ -177,6 +179,7 @@ class Session:
         self.window = None
         self.noise_thresholds.clear()
         self.offsets.clear()
+        self.averages.clear()
         self.journal.clear()
 
     def set_time_mode(self, mode: str) -> None:
@@ -270,6 +273,7 @@ class Session:
         if offsets:
             self.offsets.update(offsets)
         total = CleaningReport()
+        keys = [k for k in keys if k not in self.averages]  # une moyenne se recalcule depuis ses voies
         for i, key in enumerate(keys):
             name, label = key
             if progress:
@@ -297,13 +301,17 @@ class Session:
                 done.append(_("{} point(s) de bruit de repos mis à 0 (seuil {})").format(
                     report.noise_points, _("{:g} {}").format(threshold, ch.unit) if threshold else _("aucun")))
             self.log(_("Nettoyage {} [{}] : {}").format(label, name, " ; ".join(done) or _("rien")))
+        self._refresh_averages()
         return total
 
     def restore_raw(self, keys: Sequence[Key]) -> None:
         """Annule nettoyages et corrections des voies données."""
         for name, label in keys:
+            if (name, label) in self.averages:
+                continue
             self.measurements[name].data[label] = self._raw[name][label].to_numpy(copy=True)
             self.log(_("Données brutes restaurées : {} [{}]").format(label, name))
+        self._refresh_averages()
 
     def modified_points(self, key: Key) -> int:
         """Nombre de points qui diffèrent des données brutes (nettoyage + corrections)."""
@@ -318,6 +326,8 @@ class Session:
     def correct_point(self, key: Key, index: int) -> float:
         """US-05 : remplace le point ``index`` par l'interpolation de ses voisins."""
         name, label = key
+        if key in self.averages:
+            raise ValueError(_("« {} » est calculée : corrigez plutôt les voies dont elle fait la moyenne.").format(label))
         df = self.measurements[name].data
         old = float(df[label].iloc[index])
         value = interpolate_at(df[TIME_COL].to_numpy(), df[label].to_numpy(), index)
@@ -334,13 +344,15 @@ class Session:
         name, label = key
         df = self.measurements[name].data
         df.iloc[index, df.columns.get_loc(label)] = value
+        self._refresh_averages()
 
     # ---------------------------------------------------------------- affichage
 
     def series(self, keys: Sequence[Key], with_raw: bool = False) -> List[PlotSeries]:
         """Courbes à tracer. ``with_raw`` : ajoute, sous chaque voie modifiée, ses données brutes."""
         out = []
-        temperatures = [k for k in keys if self.measurements[k[0]].channel(k[1]).quantity == TEMPERATURE]
+        temperatures = [k for k in keys if self.measurements[k[0]].channel(k[1]).quantity == TEMPERATURE
+                        and k not in self.averages]
         # Rang fixe de chaque voie électrique parmi toutes les voies chargées : sa couleur ne
         # change pas quand on coche / décoche les autres (issue #4)
         rank = {(m.name, c.label): i for i, (m, c) in enumerate(
@@ -358,9 +370,9 @@ class Session:
             out.append(
                 PlotSeries(
                     gid=str(i),
-                    label=self._legend_with_correction(ch, (name, label), temperatures.index((name, label)) + 1
-                                                       if len(temperatures) > 1 and (name, label) in temperatures
-                                                       else 0),
+                    label=ch.label if (name, label) in self.averages else self._legend_with_correction(
+                        ch, (name, label), temperatures.index((name, label)) + 1
+                        if len(temperatures) > 1 and (name, label) in temperatures else 0),
                     x=x,
                     y=y,
                     unit=ch.unit,
@@ -549,6 +561,7 @@ class Session:
         if value != self.temperature_offset:
             self.temperature_offset = value
             self._log_correction(_("toutes les voies °C"), value, "°C")
+            self._refresh_averages()
 
     def set_humidity_offset(self, value: float) -> None:
         """Correction générale ajoutée aux voies %HR."""
@@ -556,6 +569,7 @@ class Session:
         if value != self.humidity_offset:
             self.humidity_offset = value
             self._log_correction(_("toutes les voies %HR"), value, "%HR")
+            self._refresh_averages()
 
     def set_channel_offset(self, key: Key, value: Optional[float]) -> None:
         """Correction propre à une sonde (prioritaire sur la valeur générale) ; None : la retire."""
@@ -563,12 +577,14 @@ class Session:
         if value is None:
             if self.channel_offsets.pop(key, None) is not None and key[0] in self.measurements:
                 self.log(_("Correction propre à {} [{}] retirée : valeur générale").format(key[1], key[0]))
+                self._refresh_averages()
             return
         value = parse_temperature_offset(value, unit)
         if self.channel_offsets.get(key) != value:
             self.channel_offsets[key] = value
             if key[0] in self.measurements:
                 self._log_correction("{} [{}]".format(key[1], key[0]), value, unit)
+                self._refresh_averages()
 
     def _log_correction(self, target: str, value: float, unit: str) -> None:
         if self.measurements:
@@ -578,8 +594,8 @@ class Session:
     def value_offset(self, key: Key) -> float:
         """Correction à ajouter aux valeurs de la voie (température et humidité seulement)."""
         ch = self.measurements[key[0]].channel(key[1])
-        if ch.quantity not in (TEMPERATURE, HUMIDITY):
-            return 0.0
+        if ch.quantity not in (TEMPERATURE, HUMIDITY) or key in self.averages:
+            return 0.0  # une moyenne reprend déjà les valeurs corrigées de ses voies
         if key in self.channel_offsets:
             return self.channel_offsets[key]
         return self.temperature_offset if ch.quantity == TEMPERATURE else self.humidity_offset
@@ -611,6 +627,105 @@ class Session:
     def displayed_values(self, key: Key) -> np.ndarray:
         """Valeurs telles qu'affichées et exportées (correction de température comprise)."""
         return self.measurements[key[0]].data[key[1]].to_numpy(dtype=float) + self.value_offset(key)
+
+    # ------------------------------------------------- moyennes de voies (issue #16)
+
+    def add_average(self, keys: Sequence[Key]) -> Key:
+        """Ajoute la voie « Moyenne … » des voies données (au moins deux, de même unité).
+
+        C'est une voie calculée, rangée dans le fichier de la première voie : point par point, la
+        moyenne des valeurs affichées (nettoyage et corrections compris). Les mesures d'origine ne
+        changent pas ; la moyenne est recalculée à chaque modification de ses voies. Voies d'un
+        autre fichier : interpolées linéairement sur les instants du fichier hôte, sans combler les
+        interruptions d'enregistrement. Un point manquant sur une voie -> pas de moyenne à cet
+        instant (jamais une « moyenne » d'une seule voie)."""
+        keys = list(dict.fromkeys(tuple(k) for k in keys))
+        if len(keys) < 2:
+            raise ValueError(_("Choisissez au moins deux voies pour faire une moyenne."))
+        for key in keys:
+            if key in self.averages:
+                raise ValueError(_("« {} » est déjà une moyenne : choisissez des voies mesurées.").format(key[1]))
+        channels = [self.measurements[name].channel(label) for name, label in keys]
+        units = sorted({ch.unit for ch in channels})
+        if len(units) > 1:
+            raise ValueError(_("Moyenne impossible entre des unités différentes ({}) : choisissez des voies "
+                               "de même unité.").format(", ".join(u or "?" for u in units)))
+        unit = units[0]
+        several_files = len({name for name, _label in keys}) > 1
+        names = []
+        for (name, _label), ch in zip(keys, channels):
+            short = ch.label[: -len(" ({})".format(unit))] if unit and ch.label.endswith(" ({})".format(unit)) \
+                else ch.label
+            names.append("{} [{}]".format(short, name) if several_files else short)
+        base = _("Moyenne {}").format(" / ".join(names)) + (" ({})".format(unit) if unit else "")
+        host = self.measurements[keys[0][0]]
+        taken = {ch.label for ch in host.channels} | set(host.data.columns)
+        label = _unique_name(base, taken)
+        quantities = {ch.quantity for ch in channels}
+        quantity = channels[0].quantity if len(quantities) == 1 else OTHER
+        host.channels.append(Channel(raw_name=label, label=label, unit=unit, quantity=quantity))
+        key = (host.name, label)
+        self.averages[key] = keys
+        self._refresh_averages()
+        self.log(_("Moyenne ajoutée : {} [{}] = moyenne point par point de {} (voie calculée, mesures "
+                   "inchangées)").format(label, host.name, ", ".join("{} [{}]".format(l, n) for n, l in keys))
+                 + (_(" ; voies d'autres fichiers interpolées sur les instants de {}").format(host.name)
+                    if several_files else ""))
+        return key
+
+    def remove_average(self, key: Key) -> None:
+        """Retire une voie « Moyenne … » (les voies moyennées ne changent pas)."""
+        if self.averages.pop(key, None) is None:
+            return
+        name, label = key
+        m = self.measurements.get(name)
+        if m is not None:
+            m.channels[:] = [ch for ch in m.channels if ch.label != label]
+            m.data = m.data.drop(columns=[label], errors="ignore")
+            self._raw[name] = self._raw[name].drop(columns=[label], errors="ignore")
+            self.log(_("Moyenne retirée : {} [{}]").format(label, name))
+        if self.shifted_keys is not None:
+            self.shifted_keys.discard(key)
+
+    def is_average(self, key: Key) -> bool:
+        return tuple(key) in self.averages
+
+    def _refresh_averages(self) -> None:
+        """Recalcule les voies « Moyenne … » (après nettoyage, correction, changement de base de temps…)."""
+        for key, sources in list(self.averages.items()):
+            name, label = key
+            if name not in self.measurements or any(
+                    s[0] not in self.measurements or s[1] not in self.measurements[s[0]].data.columns
+                    for s in sources):
+                self.remove_average(key)  # une des voies a été déchargée
+                continue
+            m = self.measurements[name]
+            x = m.data[TIME_COL].to_numpy(dtype=float)
+            stack = np.vstack([self._values_on_grid(source, name, x) for source in sources])
+            values = stack.mean(axis=0)  # NaN si une voie manque à cet instant
+            m.data[label] = values
+            self._raw[name][label] = values.copy()
+
+    def _values_on_grid(self, key: Key, host: str, x: np.ndarray) -> np.ndarray:
+        """Valeurs affichées de la voie, aux instants ``x`` du fichier ``host``."""
+        y = self.displayed_values(key)
+        if key[0] == host:
+            return y
+        xs = self.measurements[key[0]].data[TIME_COL].to_numpy(dtype=float)
+        ok = np.isfinite(xs)
+        xs, y = xs[ok], y[ok]
+        out = np.full(len(x), np.nan)
+        if len(xs) < 2:
+            return out
+        out = np.interp(x, xs, y, left=np.nan, right=np.nan)
+        # Pas d'interpolation à travers une interruption d'enregistrement de la voie
+        steps = np.diff(xs)
+        positive = steps[steps > 0]
+        if len(positive):
+            gap = 10.0 * float(np.median(positive))
+            after = np.clip(np.searchsorted(xs, x, side="right"), 1, len(xs) - 1)
+            out[(xs[after] - xs[after - 1]) > gap] = np.nan
+        return out
 
     # ------------------------------------------------------------------- export
 
@@ -654,6 +769,7 @@ class Session:
             self.window = self._common_window(measurements)
         for name, m in self.measurements.items():
             self._raw[name][TIME_COL] = m.data[TIME_COL].to_numpy(copy=True)
+        self._refresh_averages()
 
 
     @staticmethod
