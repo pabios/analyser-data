@@ -199,9 +199,9 @@ class ImportDialog(tk.Toplevel):
             self.table.configure(columns=())
             return
         if isinstance(result, str):
-            self.info.configure(foreground=C["destructive"], text=result + "\n\n" + (
-                _("Choisissez une autre feuille.") if is_excel(path) else
-                _("Essayez un autre séparateur ci-dessus.")))
+            hint = "" if is_gbd(path) else "\n\n" + (  # .GBD : ni feuille ni séparateur à choisir
+                _("Choisissez une autre feuille.") if is_excel(path) else _("Essayez un autre séparateur ci-dessus."))
+            self.info.configure(foreground=C["destructive"], text=result + hint)
             self.table.configure(columns=())
             return
         m = result

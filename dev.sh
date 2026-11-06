@@ -3,6 +3,7 @@
 #
 #   ./dev.sh build      construit l'image de dev (à faire une fois, ou après modif des requirements)
 #   ./dev.sh test       lance les tests automatiques
+#   ./dev.sh test-ancien  les mêmes tests sous pandas 1.4 / matplotlib 3.6 (Anaconda ancien)
 #   ./dev.sh gui        lance l'application, visible sur http://localhost:6080/vnc.html
 #   ./dev.sh smoke      test de bout en bout de l'interface + capture d'écran dans .dev-out/
 #   ./dev.sh examples   régénère les fichiers d'exemple
@@ -21,10 +22,13 @@ case "${1:-test}" in
                   echo "== pandas texte : $storage"
                   $RUN -e ANALYSER_DATA_STRING_STORAGE=$storage "$IMAGE" pytest -q -p no:cacheprovider "$@" || exit 1
               done ;;
+    test-ancien) [ $# -gt 0 ] && shift
+              docker image inspect "$IMAGE-ancien" >/dev/null 2>&1 || docker build -f docker/Dockerfile.ancien -t "$IMAGE-ancien" .
+              $RUN "$IMAGE-ancien" pytest -q -p no:cacheprovider "$@" ;;
     gui)      $RUN -it -p 6080:6080 "$IMAGE" gui ;;
     smoke)    mkdir -p .dev-out; $RUN "$IMAGE" python tools/smoke_gui.py /app/.dev-out ;;
     examples) $RUN "$IMAGE" python exemples/generer_exemples.py ;;
     shell)    $RUN -it "$IMAGE" bash ;;
     clean)    docker rmi "$IMAGE" ;;
-    *)        sed -n '2,11p' "$0"; exit 1 ;;
+    *)        sed -n '2,12p' "$0"; exit 1 ;;
 esac

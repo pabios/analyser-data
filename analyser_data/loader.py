@@ -15,6 +15,7 @@ calculé par rapport au fichier de référence (Graphset, sinon le fichier le pl
 from __future__ import annotations
 
 import csv
+import inspect
 import io
 import math
 import os
@@ -304,6 +305,11 @@ def _load_via_csv(path: Path, name: str, progress, rows, sheet: str) -> Measurem
     return m
 
 
+# pandas < 1.5 (Anaconda plus ancien, issue #16) : « line_terminator » au lieu de « lineterminator »
+_TO_CSV_EOL = "lineterminator" if "lineterminator" in inspect.signature(pd.DataFrame.to_csv).parameters \
+    else "line_terminator"
+
+
 def _load_gbd(path: Path, name: str, progress) -> Measurement:
     """Fichier natif Graphtec .GBD (issue #16) : décodé, écrit en CSV temporaire, puis lu comme
     un export CSV de l'appareil (voies « Channel N », unités, période, contrôles)."""
@@ -319,7 +325,7 @@ def _load_gbd(path: Path, name: str, progress) -> Measurement:
                 info["model"], info["period"] * 1000, info["counts"]))
             header = ["Date&Time"] + ["{} [{}]".format(c, u) if u else c for c, u in zip(frame.columns[1:], info["units"])]
             frame.to_csv(fh, sep=";", index=False, header=header, date_format="%Y-%m-%d %H:%M:%S.%f",
-                         float_format="%.10g", lineterminator="\n")
+                         float_format="%.10g", **{_TO_CSV_EOL: "\n"})
         try:
             m = _load(Path(temp), name, progress, ";")
         except LoadError as exc:
@@ -1297,8 +1303,8 @@ _DURATION_LIKE_RE = re.compile(
     r"|\d+\.\d{1,2}:\d{2}"  # 1.02:03:04
     r"|\d{1,3}:\d{2}[.,]\d+\s*$"  # MM:SS,f
     r"|\d+:\d{2}:\d{2}:\d{1,3}\s*$"  # H:MM:SS:mmm
-    r"|(\d+([.,]\d+)?\s*(ms|msec|s|sec|min|mn|h|hr)\s*)+$)", re.IGNORECASE)
-_UNIT_TOKEN_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(ms|msec|s|sec|secondes?|min|mn|minutes?|m|h|hr|heures?|hours?|j|d)\b",
+    r"|(\d+([.,]\d+)?\s*(ms|msec|s|sec|min|mn|m|h|hr)\s*)+$)", re.IGNORECASE)  # « 1h02m03s » aussi
+_UNIT_TOKEN_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(ms|msec|s|sec|secondes?|min|mn|minutes?|m|h|hr|heures?|hours?|j|d)(?![a-zé])",
                             re.IGNORECASE)
 _UNIT_SECONDS = {"ms": 1e-3, "msec": 1e-3, "s": 1, "sec": 1, "seconde": 1, "secondes": 1, "min": 60, "mn": 60,
                  "minute": 60, "minutes": 60, "m": 60, "h": 3600, "hr": 3600, "heure": 3600, "heures": 3600,
@@ -1385,11 +1391,25 @@ def _date_order(s: pd.Series) -> Optional[str]:
         for order, dayfirst in (("day", True), ("month", False)):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                parsed = pd.to_datetime(values, dayfirst=dayfirst, errors="coerce", format="mixed")
+                parsed = _mixed_datetime(values, dayfirst)
             seconds_ = parsed.dropna().astype("int64").to_numpy() / 1e9
             jumps[order] = float(np.abs(np.diff(seconds_)).max()) if len(seconds_) > 1 else 0.0
         return "month" if jumps["month"] < 0.5 * jumps["day"] else None
     return None
+
+
+# pandas >= 2 : format="mixed" (chaque valeur lue à part). pandas 1.x (Anaconda plus ancien) ne le
+# connaît pas et renvoie des dates vides SANS erreur : on y laisse la détection automatique.
+_PANDAS_2 = int(pd.__version__.split(".")[0]) >= 2
+
+
+def _mixed_datetime(values: pd.Series, dayfirst: bool) -> pd.Series:
+    """Dates écrites de façons différentes dans une même colonne (NaT si illisible)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        if _PANDAS_2:
+            return pd.to_datetime(values, format="mixed", dayfirst=dayfirst, errors="coerce")
+        return pd.to_datetime(values, dayfirst=dayfirst, errors="coerce")
 
 
 def _to_datetime(s: pd.Series) -> pd.Series:
@@ -1414,11 +1434,7 @@ def _to_datetime(s: pd.Series) -> pd.Series:
         if missing.any():
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                try:
-                    parsed[missing] = pd.to_datetime(s[missing], format="mixed", dayfirst=order != "month"
-                                                     and not fmt.startswith("%m"), errors="coerce")
-                except (TypeError, ValueError):  # pragma: no cover - pandas < 2.0
-                    parsed[missing] = pd.to_datetime(s[missing], dayfirst=order != "month", errors="coerce")
+                parsed[missing] = _mixed_datetime(s[missing], order != "month" and not fmt.startswith("%m"))
         return parsed
     # Format inhabituel : détection automatique (plus lente)
     first_value = sample.iloc[0] if len(sample) else ""

@@ -827,7 +827,7 @@ def test_temperature_color_matches_curve_legend_axis_and_stays_fixed():
         plot.draw(s.series(keys), settings=settings)
         by_label = {line.get_label(): to_hex(line.get_color()) for a in plot.axes.values() for line in a.get_lines()}
         legend = plot.legend
-        legend_colors = {t.get_text(): to_hex(h.get_color()) for t, h in zip(legend.get_texts(), legend.legend_handles)}
+        legend_colors = {t.get_text(): to_hex(h.get_color()) for t, h in zip(legend.get_texts(), getattr(legend, "legend_handles", None) or legend.legendHandles)}
         return plot, by_label, legend_colors
 
     TEMP_LABEL = "Channel 2 – M402-M210 (°C)"  # vrai nom de la voie d'enceinte (issue #16)

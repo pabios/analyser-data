@@ -144,7 +144,8 @@ Tout se passe dans Docker : rien à installer sur la machine.
 
 ```bash
 ./dev.sh build   # une fois
-./dev.sh test    # tests
+./dev.sh test    # tests (pandas récent, texte python puis pyarrow)
+./dev.sh test-ancien  # mêmes tests sous pandas 1.4 / matplotlib 3.6 (Anaconda ancien)
 ./dev.sh gui     # appli dans le navigateur : http://localhost:6080/vnc.html
 ./dev.sh smoke   # parcours complet de l'interface + captures dans .dev-out/
 ```
