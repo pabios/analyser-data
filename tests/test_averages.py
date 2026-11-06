@@ -88,7 +88,7 @@ def test_temperature_average_uses_corrected_values_once(tmp_path):
     np.testing.assert_allclose(s.displayed_values(key), (19.0 + 22.5) / 2)
     labels = [p.label for p in s.series([(name, "T1 (°C)"), (name, "T2 (°C)"), key])]
     assert labels[2] == "Moyenne T1 / T2 (°C)"
-    assert labels[0].startswith("Température ambiante 1") and labels[1].startswith("Température ambiante 2")
+    assert labels[0] == "T1 (-1,0 °C)" and labels[1] == "T2 (+0,5 °C)"  # fichier d'enceinte : vrais noms
 
 
 def test_average_across_files_interpolates_without_bridging_gaps(tmp_path):

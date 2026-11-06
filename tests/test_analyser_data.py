@@ -740,7 +740,21 @@ def test_legend_shows_channel_and_unit_never_the_file():
     s = Session()
     s.load_files([str(EXAMPLES / "GL980_Mes-_260601-170139.CSV"), str(EXAMPLES / "nanodac_Rd_Z.txt")])
     keys = [(m.name, m.channels[0].label) for m in s.measurements.values()]
-    assert [p.label for p in s.series(keys)] == ["Channel 3 (V)", "Température ambiante"]
+    # Fichier d'enceinte (nanodac) : le vrai nom de la voie et le repère de la sonde (issue #16)
+    assert [p.label for p in s.series(keys)] == ["Channel 3 (V)", "Channel 2 – M402-M210 (°C)"]
+
+
+def test_temperature_of_a_logger_file_stays_ambient_temperature():
+    """Une voie °C d'un fichier de centrale (pas d'enceinte) garde « Température ambiante »."""
+    from analyser_data.channels import TEMPERATURE, Channel
+
+    s = Session()
+    s.load_files([str(EXAMPLES / "GL980_Mes-_260601-170139.CSV")])
+    name = next(iter(s.measurements))
+    m = s.measurements[name]
+    m.data["Channel 9"] = 25.0
+    m.channels.append(Channel("CH9", "Channel 9", "°C", TEMPERATURE))
+    assert s.series([(name, "Channel 9")])[0].label == "Température ambiante"
 
 
 def test_several_temperatures_are_numbered():
@@ -816,23 +830,24 @@ def test_temperature_color_matches_curve_legend_axis_and_stays_fixed():
         legend_colors = {t.get_text(): to_hex(h.get_color()) for t, h in zip(legend.get_texts(), legend.legend_handles)}
         return plot, by_label, legend_colors
 
+    TEMP_LABEL = "Channel 2 – M402-M210 (°C)"  # vrai nom de la voie d'enceinte (issue #16)
     plot, curves, legend = colors(every)
-    assert curves["Température ambiante"] == legend["Température ambiante"] == TEMPERATURE_COLOR
+    assert curves[TEMP_LABEL] == legend[TEMP_LABEL] == TEMPERATURE_COLOR
     assert to_hex(plot.axes["température"].yaxis.label.get_color()) == TEMPERATURE_COLOR
-    assert TEMPERATURE_COLOR not in [c for k, c in curves.items() if k != "Température ambiante"]
+    assert TEMPERATURE_COLOR not in [c for k, c in curves.items() if k != TEMP_LABEL]
 
     _p, fewer, _l = colors([every[3], temp])  # on masque des voies : couleurs inchangées
     assert fewer["Channel 6 (V)"] == curves["Channel 6 (V)"]
-    assert fewer["Température ambiante"] == TEMPERATURE_COLOR
+    assert fewer[TEMP_LABEL] == TEMPERATURE_COLOR
 
     custom = PlotSettings(curves={temp: CurveStyle(color="#00ff00", absolute=True)})
     plot, curves, legend = colors(every, custom)  # couleur choisie : courbe, légende et axe suivent
-    assert curves["|Température ambiante|"] == legend["|Température ambiante|"] == "#00ff00"
+    assert curves["|{}|".format(TEMP_LABEL)] == legend["|{}|".format(TEMP_LABEL)] == "#00ff00"
     assert to_hex(plot.axes["température"].yaxis.label.get_color()) == "#00ff00"
 
     fig = _plot_figure(s, every, None, "Rapport")  # export image / PDF
     exported = {line.get_label(): to_hex(line.get_color()) for a in fig.axes for line in a.get_lines()}
-    assert exported["Température ambiante"] == TEMPERATURE_COLOR
+    assert exported[TEMP_LABEL] == TEMPERATURE_COLOR
 
 
 @pytest.mark.parametrize("position", ["right", "top", "bottom"])

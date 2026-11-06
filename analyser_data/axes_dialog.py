@@ -16,7 +16,9 @@ from .channels import HUMIDITY, TEMPERATURE
 from .export import Key
 from .help import HelpWindow
 from .i18n import _, get_language
-from .plotting import LEGEND_POSITIONS, LINE_STYLES, MAIN_AXIS, MARKERS, AxisSettings, CurveStyle, PlotSettings, format_hms, parse_hms
+from .plotting import (LEGEND_POSITIONS, LINE_STYLES, MAIN_AXIS, MARKERS, TIME_TICK_STEPS, VALUE_TICK_STEPS,
+                       AxisSettings, CurveStyle, PlotSettings, format_hms, format_tick_step, parse_hms,
+                       parse_tick_step)
 from .theme import C, card
 
 AXIS_NAMES = {
@@ -104,9 +106,13 @@ class AxesDialog(tk.Toplevel):
                   style="Title.Card.TLabel").grid(row=1, column=0, columnspan=4, sticky=tk.W, pady=(14, 4))
         self.x_vars = (self._field(grid, 2, _("Min"), fmt(lo)), self._field(grid, 2, _("Max"), fmt(hi), column=2))
         self.x_label = self._field(grid, 3, _("Libellé"), ax.get_xlabel(), width=46, span=3)
+        # Issue #17 : intervalle entre deux graduations (liste ou saisie libre)
+        self.x_step = self._step_field(grid, 2, self.settings.x_percent_step if self.percent else self.settings.x.step,
+                                      time_axis=not self.percent)
         self._x_initial = (fmt(lo), fmt(hi), ax.get_xlabel())
 
         self.y_vars: Dict[str, tuple] = {}
+        self.y_steps: Dict[str, tk.StringVar] = {}
         row = 4
         for name, a in plot.axes.items():
             lo, hi = a.get_ylim()
@@ -116,12 +122,25 @@ class AxesDialog(tk.Toplevel):
             vmin = self._field(grid, row + 1, _("Min"), _number(lo))
             vmax = self._field(grid, row + 1, _("Max"), _number(hi), column=2)
             label = self._field(grid, row + 2, _("Libellé"), a.get_ylabel(), width=46, span=3)
+            self.y_steps[name] = self._step_field(grid, row + 1, axis.step, time_axis=False)
             ttk.Label(grid, text=_("Échelle"), style="Card.TLabel").grid(row=row + 3, column=0, sticky=tk.W, pady=3)
             scale = tk.StringVar(value=_(SCALES[axis.log]))
             ttk.Combobox(grid, textvariable=scale, values=[_(v) for v in SCALES.values()], state="readonly",
                          width=16).grid(row=row + 3, column=1, sticky=tk.W, pady=3)
             self.y_vars[name] = (vmin, vmax, label, scale, (_number(lo), _number(hi), a.get_ylabel()))
             row += 4
+
+    def _step_field(self, grid, row, value, time_axis: bool) -> tk.StringVar:
+        """« Graduations tous les » : liste des pas usuels, ou valeur saisie ; appliqué tout de suite."""
+        ttk.Label(grid, text=_("Graduations tous les"), style="Card.TLabel").grid(row=row, column=4, sticky=tk.W,
+                                                                                  padx=(16, 8), pady=3)
+        var = tk.StringVar(value=format_tick_step(value, time_axis))
+        choices = TIME_TICK_STEPS if time_axis else VALUE_TICK_STEPS
+        box = ttk.Combobox(grid, textvariable=var, values=[_(v) for v in choices.values()], width=12)
+        box.grid(row=row, column=5, sticky=tk.W, pady=3)
+        box.bind("<<ComboboxSelected>>", lambda _e: self.apply())
+        box.bind("<Return>", lambda _e: (self.apply(), "break")[1])
+        return var
 
     def _axis_name(self, name: str) -> str:
         """Axe principal portant la température seule (issue #14) : nommé comme tel."""
@@ -206,12 +225,18 @@ class AxesDialog(tk.Toplevel):
                                      if not self.percent else _("Nombre invalide : « {} »").format(var.get()))
         if changed(self.x_label, label0):
             out.x.label = self.x_label.get().strip() or None  # vide : libellé par défaut
+        step = parse_tick_step(self.x_step.get(), time_axis=not self.percent)
+        if self.percent:
+            out.x_percent_step = step
+        else:
+            out.x.step = step
         if out.x.min is not None and out.x.max is not None and out.x.min >= out.x.max:
             raise ValueError(_("Axe X : le minimum doit être inférieur au maximum."))
 
         for name, (vmin, vmax, label, scale, initial) in self.y_vars.items():
             axis = out.y_axis(name)
             axis.log = scale.get() == _(SCALES[True])
+            axis.step = parse_tick_step(self.y_steps[name].get(), time_axis=False)
             for var, init, attr in ((vmin, initial[0], "min"), (vmax, initial[1], "max")):
                 if changed(var, init):
                     try:

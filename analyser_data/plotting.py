@@ -50,6 +50,7 @@ class AxisSettings:
     max: Optional[float] = None
     label: Optional[str] = None
     log: bool = False
+    step: Optional[float] = None  # pas entre deux graduations (issue #17) ; axe X en minutes
 
 
 @dataclass
@@ -72,6 +73,28 @@ class PlotSettings:
     y: Dict[str, AxisSettings] = field(default_factory=dict)
     curves: Dict[Tuple[str, str], CurveStyle] = field(default_factory=dict)
     legend: str = "right"  # LEGEND_POSITIONS
+    x_percent_step: Optional[float] = None  # pas de l'axe X en % (base de temps « Durée étirée »)
+
+    def tick_steps(self) -> Dict[str, float]:
+        """Pas de graduation choisis (issue #17), à mémoriser dans la configuration."""
+        out = {"x": self.x.step, "x_percent": self.x_percent_step}
+        out.update({name: axis.step for name, axis in self.y.items()})
+        return {k: v for k, v in out.items() if v}
+
+    def set_tick_steps(self, steps: Dict[str, float]) -> None:
+        for name, value in (steps or {}).items():
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not (math.isfinite(value) and value > 0):
+                continue
+            if name == "x":
+                self.x.step = value
+            elif name == "x_percent":
+                self.x_percent_step = value
+            else:
+                self.y_axis(name).step = value
 
     def y_axis(self, name: str) -> AxisSettings:
         return self.y.setdefault(name, AxisSettings())
@@ -115,6 +138,96 @@ def format_hms(minutes: float, _pos=None) -> str:
 def format_axis_time(minutes: float, _pos=None) -> str:
     """Graduation de l'axe X : toujours « H:MM:SS », même au-delà de 24 h (ex. « 48:00:00 »)."""
     return format_hms(minutes)
+
+
+# Pas de graduation proposés (issue #17) ; None : automatique. Axe du temps : en minutes.
+TIME_TICK_STEPS = {None: "Automatique", 30.0: "30 min", 60.0: "1 h", 120.0: "2 h", 360.0: "6 h", 720.0: "12 h",
+                   1440.0: "1 jour"}
+VALUE_TICK_STEPS = {None: "Automatique", 0.1: "0,1", 0.5: "0,5", 1.0: "1", 2.0: "2", 5.0: "5", 10.0: "10",
+                    20.0: "20", 50.0: "50", 100.0: "100"}
+MAX_TICKS = 100  # au-delà (pas trop fin pour la période affichée), on prend un multiple du pas
+
+
+def parse_tick_step(text: str, time_axis: bool) -> Optional[float]:
+    """Pas de graduation saisi -> valeur (minutes pour l'axe du temps), None : automatique.
+
+    Axe du temps : un choix de la liste (« 1 h », « 1 jour »), une durée « H:MM:SS » / « H:MM »,
+    ou un nombre suivi de s, min, h ou j (« 15 min », « 3 h », « 2 j »). Autres axes : un
+    nombre (virgule ou point). ValueError (message lisible) si illisible ou négatif."""
+    text = (text or "").strip()
+    choices = TIME_TICK_STEPS if time_axis else VALUE_TICK_STEPS
+    for value, label in choices.items():
+        if text in (label, _(label)):
+            return value
+    if not text:
+        return None
+    message = (_("Pas de graduation invalide : « {} » (ex. 30 min, 1 h, 1:30:00, 1 jour).") if time_axis
+               else _("Pas de graduation invalide : « {} » (ex. 5 ou 0,5).")).format(text)
+    value = None
+    if time_axis:
+        if ":" in text:
+            try:
+                value = parse_hms(text)
+            except ValueError:
+                raise ValueError(message) from None
+        else:
+            import re
+
+            match = re.match(r"^\s*(\d+(?:[.,]\d+)?)\s*(s|sec|secondes?|min|minutes?|h|heures?|hours?|j|jours?|"
+                             r"d|days?)?\s*$", text, re.IGNORECASE)
+            if not match:
+                raise ValueError(message)
+            number = float(match.group(1).replace(",", "."))
+            unit = (match.group(2) or "min").lower()
+            factor = 1 / 60 if unit.startswith("s") else 60.0 if unit.startswith("h") else \
+                1440.0 if unit[0] in "jd" else 1.0
+            value = number * factor
+    else:
+        try:
+            value = float(text.replace(",", ".").replace(" ", ""))
+        except ValueError:
+            raise ValueError(message) from None
+    if value is None or not math.isfinite(value) or value <= 0:
+        raise ValueError(message)
+    return value
+
+
+def format_tick_step(value: Optional[float], time_axis: bool) -> str:
+    """Pas de graduation -> texte de la liste (« 1 h », « 0,5 », « Automatique »)."""
+    choices = TIME_TICK_STEPS if time_axis else VALUE_TICK_STEPS
+    if value in choices:
+        return _(choices[value])
+    if time_axis:
+        return format_hms(value)
+    text = "{:g}".format(value)
+    from .i18n import get_language
+
+    return text.replace(".", ",") if get_language() == "fr" else text
+
+
+class StepLocator(Locator):
+    """Graduations à un pas choisi par l'utilisateur, alignées sur ses multiples (0, 1 h, 2 h…).
+
+    Si le pas donnerait plus de ``MAX_TICKS`` graduations (dézoom sur un long essai), on
+    garde un multiple du pas pour rester lisible ; en zoomant, le pas choisi revient."""
+
+    def __init__(self, step: float):
+        self.step = float(step)
+
+    def __call__(self):
+        vmin, vmax = self.axis.get_view_interval()
+        return self.tick_values(vmin, vmax)
+
+    def tick_values(self, vmin, vmax):
+        if vmax < vmin:
+            vmin, vmax = vmax, vmin
+        step = self.step
+        count = (vmax - vmin) / step
+        if count > MAX_TICKS:
+            step *= math.ceil(count / MAX_TICKS)
+        start = math.ceil(vmin / step - 1e-9) * step
+        ticks = np.arange(start, vmax + step * 1e-6, step)
+        return np.round(np.round(ticks / self.step) * self.step, 12)  # pas de 0,30000000000000004
 
 
 class TimeLocator(Locator):
@@ -411,6 +524,9 @@ class PlotManager:
         ax = self._main_ax
         if settings.x.label is not None:
             ax.set_xlabel(settings.x.label)
+        x_step = settings.x_percent_step if self.percent_axis else settings.x.step
+        if x_step:
+            ax.xaxis.set_major_locator(StepLocator(x_step))
         if settings.x.min is not None or settings.x.max is not None:
             ax.set_xlim(left=settings.x.min, right=settings.x.max)
         for name, a in self.axes.items():
@@ -419,6 +535,8 @@ class PlotManager:
                 continue
             if axis.log:
                 a.set_yscale("log")
+            elif axis.step:
+                a.yaxis.set_major_locator(StepLocator(axis.step))
             if axis.label is not None:
                 a.set_ylabel(axis.label)
             if axis.min is not None or axis.max is not None:

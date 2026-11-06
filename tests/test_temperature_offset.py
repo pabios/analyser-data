@@ -37,7 +37,7 @@ def test_offset_applies_to_temperature_only_and_keeps_raw_data(tmp_path):
     series = {p.key: p for p in s.series([temp, current])}
     np.testing.assert_allclose(series[temp].y, measured + 0.3)
     np.testing.assert_array_equal(series[current].y, current_values)  # le courant n'est pas touché
-    assert series[temp].label == "Température ambiante (+0,3 °C)"
+    assert series[temp].label == "Channel 2 – M402-M210 (+0,3 °C)"  # vrai nom (fichier d'enceinte)
     np.testing.assert_array_equal(s.measurements[nano].data["Channel 2"].to_numpy(), measured)  # mesure intacte
 
     out = tmp_path / "export.csv"
@@ -51,7 +51,7 @@ def test_offset_applies_to_temperature_only_and_keeps_raw_data(tmp_path):
 
     s.set_temperature_offset(0)  # valeur nulle : affichage = mesure
     np.testing.assert_array_equal(s.series([temp])[0].y, measured)
-    assert s.series([temp])[0].label == "Température ambiante"
+    assert s.series([temp])[0].label == "Channel 2 – M402-M210 (°C)"
 
 
 def test_report_statistics_include_the_correction(tmp_path):
@@ -85,7 +85,7 @@ def test_per_probe_and_humidity_corrections():
     s.set_channel_offset(t2, -0.2)  # sonde 2 réglée à part
     assert (s.value_offset(t1), s.value_offset(t2), s.value_offset(rh)) == (0.5, -0.2, -1.2)
     labels = [p.label for p in s.series([t1, t2, rh])]
-    assert labels == ["Température ambiante 1 (+0,5 °C)", "Température ambiante 2 (-0,2 °C)", "Channel 4 (-1,2 %HR)"]
+    assert labels == ["Channel 2 – M402-M210 (+0,5 °C)", "Channel 3 (-0,2 °C)", "Channel 4 (-1,2 %HR)"]
     np.testing.assert_allclose(s.displayed_values(rh), 45.0 - 1.2)
     s.set_channel_offset(t2, None)  # retour à la valeur générale
     assert s.value_offset(t2) == 0.5

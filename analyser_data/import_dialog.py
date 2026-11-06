@@ -25,7 +25,7 @@ from .gbd import is_gbd
 from .i18n import _, get_setting, set_setting
 from .loader import SPACE, TIME_COL, LoadError
 from .plotting import format_hms
-from .session import legend_label
+from .session import is_clim_file, legend_label
 from .theme import C, card
 
 SEPARATOR_CHOICES = {
@@ -221,14 +221,14 @@ class ImportDialog(tk.Toplevel):
                 duration, m.start.strftime("%d/%m/%Y %H:%M:%S"), end.strftime("%d/%m/%Y %H:%M:%S")))
         else:
             lines.append(_("Durée : {}").format(duration))
-        lines.append(_("Voies : {}").format(", ".join(legend_label(ch) for ch in m.channels)))
+        lines.append(_("Voies : {}").format(", ".join(legend_label(ch, real_name=is_clim_file(m)) for ch in m.channels)))
         lines += m.warnings
         self.info.configure(text="\n".join(lines), foreground=C["fg"])
 
         columns = [TIME_COL] + [ch.label for ch in m.channels]
         self.table.configure(columns=list(range(len(columns))))
         for i, ch in enumerate([None] + m.channels):
-            title = _("Temps (H:MM:SS)") if ch is None else legend_label(ch)
+            title = _("Temps (H:MM:SS)") if ch is None else legend_label(ch, real_name=is_clim_file(m))
             self.table.heading(i, text=title)
             self.table.column(i, width=130 if ch is None else 110, anchor=tk.E, stretch=False)
         fast = m.period_s < 1  # échantillonnage rapide : millisecondes affichées

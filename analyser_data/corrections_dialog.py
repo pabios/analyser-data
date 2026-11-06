@@ -15,7 +15,7 @@ from typing import Dict
 from .channels import HUMIDITY, TEMPERATURE
 from .export import Key
 from .i18n import _
-from .session import format_offset, legend_label, parse_temperature_offset
+from .session import format_offset, is_clim_file, legend_label, parse_temperature_offset
 from .theme import C, card
 
 
@@ -54,7 +54,7 @@ class ProbeCorrectionsDialog(tk.Toplevel):
         for row, (name, ch) in enumerate(probes, start=1):
             key = (name, ch.label)
             number = temperatures.index((name, ch)) + 1 if len(temperatures) > 1 and ch.quantity == TEMPERATURE else 0
-            ttk.Label(table, text="{} — {}".format(legend_label(ch, number), ch.label), style="Card.TLabel").grid(
+            ttk.Label(table, text="{} — {}".format(legend_label(ch, number, real_name=is_clim_file(session.measurements[name])), ch.label), style="Card.TLabel").grid(
                 row=row, column=0, sticky=tk.W, padx=6, pady=2)
             ttk.Label(table, text=name, style="Muted.Card.TLabel").grid(row=row, column=1, sticky=tk.W, padx=6)
             cell = ttk.Frame(table, style="Card.TFrame")

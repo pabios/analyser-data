@@ -34,11 +34,12 @@ from .export import Key
 from .help import HelpWindow
 from .import_dialog import ImportDialog, needs_dialog, preview_enabled
 from .averages_dialog import AveragesDialog
+from .fft_dialog import FftDialog
 from .corrections_dialog import ProbeCorrectionsDialog, ShiftedChannelsDialog
 from .cycles_dialog import CyclesDialog
 from .loader import write_anonymized_extract, write_extract
 from .report import build_report, save_figure_image
-from .session import journal_path
+from .session import is_clim_file, journal_path, legend_label
 from .plotting import PlotManager, PlotSettings, format_hms
 from .session import (EXPORT_STEPS, TEMPERATURE_OFFSET_RANGE, TEMPERATURE_OFFSET_STEP, TIME_MODES, Session,
                       format_offset, parse_temperature_offset)
@@ -66,7 +67,7 @@ class AnalyserDataApp:
         self._file_item: Dict[str, str] = {}  # nom de fichier -> id Treeview
         self._gid_key: Dict[str, Key] = {}  # gid de courbe -> voie
         self._key_color: Dict[Key, str] = {}  # voie -> couleur de sa courbe
-        self.plot_settings = PlotSettings()  # axes et courbes réglés par l'utilisateur (gardés au redessin)
+        self.plot_settings = initial_plot_settings()  # axes et courbes réglés par l'utilisateur (gardés au redessin)
         try:  # corrections de température / d'humidité mémorisées (issue #11)
             self.session.set_temperature_offset(get_setting("temperature_offset", 0.0))
             self.session.set_humidity_offset(get_setting("humidity_offset", 0.0))
@@ -199,8 +200,10 @@ class AnalyserDataApp:
         ttk.Button(row, text=_("Tout décocher"), style="Small.TButton",
                    command=lambda: self.select_all(False)).pack(side=tk.LEFT, padx=(6, 0))
         # Issue #16 : moyenne de deux voies (ou plus), affichée comme une voie de plus
+        ttk.Button(row, text=_("FFT…"), style="Small.TButton",
+                   command=self.open_fft).pack(side=tk.RIGHT)
         ttk.Button(row, text=_("Moyenne…"), style="Small.TButton",
-                   command=self.open_averages).pack(side=tk.RIGHT)
+                   command=self.open_averages).pack(side=tk.RIGHT, padx=(0, 6))
         tree_frame = ttk.Frame(box, style="Card.TFrame")
         tree_frame.pack(fill=tk.BOTH, expand=True)
         self.tree = ttk.Treeview(tree_frame, selectmode="none", height=11, show="tree")
@@ -490,7 +493,7 @@ class AnalyserDataApp:
             return
         self.session.clear()
         self._checked.clear()
-        self.plot_settings = PlotSettings()
+        self.plot_settings = initial_plot_settings()
         self._set_offset(0.0)
         self._rebuild_tree()
         self.redraw()
@@ -512,6 +515,8 @@ class AnalyserDataApp:
                 self.session.log((_("Affichage en valeur absolue |x| : {} [{}] (données inchangées)") if after else
                                   _("Affichage en valeur absolue désactivé : {} [{}]")).format(key[1], key[0]))
         self.plot_settings = settings
+        if settings.tick_steps() != (get_setting("tick_steps") or {}):
+            set_setting("tick_steps", settings.tick_steps())  # issue #17 : pas de graduation mémorisés
         # Le zoom en cours est gardé si aucune limite de temps n'a été saisie
         keep = settings.x.min is None and settings.x.max is None
         self._redraw_with_view(self.plot.current_view() if keep else None)
@@ -539,6 +544,15 @@ class AnalyserDataApp:
             messagebox.showinfo(_("Moyenne de voies"), _("Ouvrez d'abord des fichiers de mesure."), parent=self.root)
             return
         AveragesDialog(self, [k for k in self.selected_keys() if not self.session.is_average(k)])
+
+    def open_fft(self):
+        """Spectre FFT des voies cochées, sur la zone affichée (issue #16)."""
+        if self.busy:
+            return None
+        if not self.session.measurements:
+            messagebox.showinfo(_("Spectre FFT"), _("Ouvrez d'abord des fichiers de mesure."), parent=self.root)
+            return None
+        return FftDialog(self, self.selected_keys(), self.plot.current_view())
 
     def add_average(self, keys) -> None:
         """Ajoute la voie « Moyenne … » des voies choisies et l'affiche. ValueError si impossible."""
@@ -847,8 +861,10 @@ class AnalyserDataApp:
         for m in self.session.measurements.values():
             file_id = self.tree.insert("", tk.END, text=" " + m.name, open=True, tags=("file",))
             self._file_item[m.name] = file_id
+            clim = is_clim_file(m)  # issue #16 : vrai nom des voies des fichiers d'enceinte
             for ch in m.channels:
-                item = self.tree.insert(file_id, tk.END, text=" " + ch.label)
+                item = self.tree.insert(file_id, tk.END, text=" " + (legend_label(ch, real_name=True) if clim
+                                                                     else ch.label))
                 self._item_key[item] = (m.name, ch.label)
         self._refresh_checkmarks()
         lines = ["{}{} · {} · {}".format("★ " if m is ref and len(self.session.measurements) > 1 else "",
@@ -1073,6 +1089,13 @@ class AnalyserDataApp:
 
 
 LOG_FILE = Path.home() / "analyser_data_erreurs.log"
+
+
+def initial_plot_settings() -> PlotSettings:
+    """Réglages du graphique au démarrage : par défaut, avec les pas de graduation mémorisés."""
+    settings = PlotSettings()
+    settings.set_tick_steps(get_setting("tick_steps") or {})
+    return settings
 
 
 def log_error(details: str) -> Path:

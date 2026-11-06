@@ -419,6 +419,54 @@ def main():
     assert key not in gui.session.all_keys()
     print("moyenne de voies : OK")
 
+    # Issue #16 : spectre FFT des voies cochées (zone affichée)
+    for k in gui._checked:
+        gui._checked[k] = k in ((gl, "Channel 4"), (gl, "Channel 3"))
+    gui._refresh_checkmarks()
+    gui.redraw()
+    pump(root)
+    fft = gui.open_fft()
+    pump(root)
+    assert len(fft.spectra) == 2 and all(sp.peak_hz for sp in fft.spectra.values())
+    assert len(fft.figure.axes) == 2  # une unité par graphique (V, A)
+    shot_window(fft, "32_fft.png")
+    fft.log_y.set(True)
+    fft.redraw()
+    pump(root)
+    shot_window(fft, "33_fft_log.png")
+    fft.destroy()
+    print("FFT : OK")
+
+    # Issue #17 : graduations toutes les 5 min (X) et tous les 2 A (Y)
+    axes_dialog = AxesDialog(gui, gui.selected_keys())
+    pump(root)
+    axes_dialog.x_step.set("5 min")
+    axes_dialog.y_steps["main"].set("2")
+    shot_window(axes_dialog, "34_graduations_reglage.png")
+    assert axes_dialog.apply()
+    axes_dialog.destroy()
+    pump(root)
+    import numpy as _np
+    ticks = gui.plot.axes["main"].get_xticks()
+    assert _np.allclose(_np.diff(ticks), 5.0), ticks
+    assert _np.allclose(_np.diff(gui.plot.axes["main"].get_yticks()), 2.0)
+    shot(root, "35_graduations.png")
+    gui.apply_plot_settings(app_module.initial_plot_settings().__class__())  # retour aux graduations auto
+    pump(root)
+    print("graduations : OK")
+
+    # Issue #16 : vrai nom des voies des fichiers d'enceinte (légende et liste)
+    nano = next(n for n in gui.session.measurements if n.startswith("nanodac"))
+    for k in gui._checked:
+        gui._checked[k] = k[0] == nano
+    gui._refresh_checkmarks()
+    gui.redraw()
+    pump(root)
+    texts = [t.get_text() for t in gui.figure.legends[0].get_texts()]
+    assert texts == ["Channel 2 – M402-M210 (°C)"], texts
+    shot(root, "36_noms_clim.png")
+    print("noms des voies clim : OK")
+
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
     shot_window(help_window, "12_aide.png")
     help_window.destroy()

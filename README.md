@@ -48,6 +48,9 @@ python main.py
    Bouton **Moyenne…** : moyenne point par point de deux voies (ou plus) de même unité,
    ajoutée comme une voie de plus (« Moyenne Channel 4 / Channel 5 (A) ») ; voie calculée,
    les mesures d'origine ne changent pas.
+   Bouton **FFT…** : spectre d'amplitude des voies cochées (zone affichée ou tout l'essai),
+   pic principal, export CSV et image. Les voies d'un fichier d'enceinte climatique
+   gardent leur vrai nom dans la légende (« Channel 2 – M402-M210 (°C) »).
 3. **Nettoyer…** : supprime les pics parasites (quelle que soit leur hauteur) et **lisse le bruit
    sans changer le niveau mesuré** (les créneaux restent verticaux, rien n'est mis à 0). En option :
    forcer le repos à 0 sous un seuil calculé sur les données, corriger un décalage de zéro. La
@@ -60,7 +63,8 @@ python main.py
    **corrections de température et d'humidité** de -5,0 à +5,0 (générales ou **par sonde**,
    affichée = mesurée + correction, reprises dans les exports et le journal, mémorisées).
 6. Icône **Modifier les axes et les courbes** (barre d'outils du graphique) : titre, début / fin
-   du temps en H:MM:SS, min / max / titre / échelle log de chaque axe Y, nom, couleur, épaisseur,
+   du temps en H:MM:SS, min / max / titre / échelle log et **graduations** (pas de 30 min,
+   1 h… 1 jour, ou saisi ; mémorisé) de chaque axe, nom, couleur, épaisseur,
    trait et **valeur absolue |x|** de chaque voie, position de la **légende** (toujours hors
    des courbes : droite, haut, bas ; bouton « Légende » pour la masquer). Gardé jusqu'au
    bouton « Maison ».

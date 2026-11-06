@@ -352,7 +352,7 @@ class Session:
         """Courbes à tracer. ``with_raw`` : ajoute, sous chaque voie modifiée, ses données brutes."""
         out = []
         temperatures = [k for k in keys if self.measurements[k[0]].channel(k[1]).quantity == TEMPERATURE
-                        and k not in self.averages]
+                        and k not in self.averages and not is_clim_file(self.measurements[k[0]])]
         # Rang fixe de chaque voie électrique parmi toutes les voies chargées : sa couleur ne
         # change pas quand on coche / décoche les autres (issue #4)
         rank = {(m.name, c.label): i for i, (m, c) in enumerate(
@@ -602,7 +602,7 @@ class Session:
 
     def _legend_with_correction(self, ch: Channel, key: Key, number: int) -> str:
         """« Température ambiante (+0,5 °C) », « Channel 4 (-1,2 %HR) » : correction visible."""
-        label = legend_label(ch, number)
+        label = legend_label(ch, number, real_name=is_clim_file(self.measurements[key[0]]))
         offset = self.value_offset(key)
         if not offset:
             return label
@@ -727,6 +727,26 @@ class Session:
             out[(xs[after] - xs[after - 1]) > gap] = np.nan
         return out
 
+    # --------------------------------------------------------- spectre FFT (issue #16)
+
+    def spectrum(self, key: Key, view: Optional[Tuple[float, float]] = None):
+        """Spectre d'amplitude (FFT) de la voie, telle qu'affichée (nettoyage et corrections
+        compris), sur la période ``view`` de l'axe du graphique (minutes ou %) ou sur tout l'essai.
+        Le temps réel écoulé sert au calcul, même sur un axe en %."""
+        from .fft import amplitude_spectrum
+
+        name, label = key
+        m = self.measurements[name]
+        x = m.data[TIME_COL].to_numpy(dtype=float)
+        if self.is_key_shifted(key) and not self.percent_axis:
+            x = x + self.time_offset_min
+        mask = np.ones(len(x), dtype=bool)
+        if self.window is not None:
+            mask &= (x >= self.window[0] - 1e-9) & (x <= self.window[1] + 1e-9)
+        if view is not None:
+            mask &= (x >= min(view)) & (x <= max(view))
+        return amplitude_spectrum(np.asarray(m.elapsed_min, dtype=float)[mask], self.displayed_values(key)[mask])
+
     # ------------------------------------------------------------------- export
 
     def export_csv(self, path, keys: Sequence[Key], progress: Optional[Callable] = None) -> pd.DataFrame:
@@ -783,9 +803,23 @@ class Session:
         return (start, end) if end > start else None
 
 
-def legend_label(ch: Channel, temperature_number: int = 0) -> str:
+def is_clim_file(m: Measurement) -> bool:
+    """Fichier d'enceinte climatique (nanodac, export d'enceinte…) : ses voies gardent leur nom."""
+    return m.source == "Clim" or m.is_thermal
+
+
+def legend_label(ch: Channel, temperature_number: int = 0, real_name: bool = False) -> str:
     """Nom d'une voie dans la légende (issues #1 et #3) : « Channel 1 (V) », jamais le nom du
-    fichier ; la température est la « Température ambiante » (numérotée s'il y en a plusieurs)."""
+    fichier ; la température est la « Température ambiante » (numérotée s'il y en a plusieurs).
+
+    ``real_name`` (voies d'un fichier d'enceinte climatique, issue #16) : le vrai nom de la voie
+    dans le fichier, avec le repère de la sonde s'il est connu (« Channel 2 – M402-M210 (°C) »)."""
+    if real_name:
+        suffix = " ({})".format(ch.unit) if ch.unit else ""
+        base = ch.label[: -len(suffix)] if suffix and ch.label.endswith(suffix) else ch.label
+        if ch.alias and ch.alias.lower() not in base.lower():
+            base = "{} – {}".format(base, ch.alias)
+        return base + suffix
     if ch.quantity == TEMPERATURE:
         if temperature_number:
             return _("Température ambiante {}").format(temperature_number)

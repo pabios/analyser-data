@@ -145,18 +145,46 @@ Channels from two files: those of the second are interpolated onto the timestamp
 first, never across a recording interruption. “Remove” (same window) deletes it; the log
 keeps a record."""),
 
+    ("Spectre FFT", "Spectre FFT", """\
+Bouton « FFT… » de la carte « Voies de mesure » : spectre d'amplitude des voies cochées
+(cochez-en d'autres dans la fenêtre). Calcul sur la zone affichée du graphique (zoom) ou
+sur tout l'essai, avec les valeurs affichées (nettoyage et corrections compris).
+Méthode : moyenne retirée (donnée à part dans le tableau), fenêtre de Hann ; une
+sinusoïde d'amplitude A donne un pic de hauteur A, dans l'unité de la voie. Un graphique
+par unité ; tableau : pic principal (fréquence et période), amplitude, moyenne, points
+analysés. Les points manquants (trous, interruptions d'enregistrement) sont comblés par
+interpolation pour le calcul et comptés : choisissez une zone sans interruption pour un
+spectre exact. Échelles log possibles ; export du spectre en CSV et en image. Les
+mesures ne sont pas modifiées.""",
+     "FFT spectrum", """\
+“FFT…” button of the “Channels” card: amplitude spectrum of the ticked channels (tick
+others in the window). Calculated on the displayed area of the chart (zoom) or on the
+whole test, with the displayed values (cleaning and corrections included).
+Method: mean removed (given separately in the table), Hann window; a sine of amplitude A
+gives a peak of height A, in the channel unit. One chart per unit; table: main peak
+(frequency and period), amplitude, mean, analysed points. Missing points (holes,
+recording interruptions) are filled by interpolation for the calculation and counted:
+choose an area without interruption for an exact spectrum. Log scales available; export
+of the spectrum as CSV and image. Measurements are not modified."""),
+
     ("Axes et courbes", "Axes et courbes", """\
 Bouton « Modifier les axes et les courbes » de la barre d'outils (icône de courbe, à
 gauche de la disquette) :
 • Onglet Axes : titre du graphique ; début et fin du temps (H:MM:SS, ex. 1:30:00 ou
   48:00:00) ; pour chaque axe Y (signaux électriques, °C, %HR) : min, max, libellé et
   échelle linéaire ou logarithmique. Champ vide = automatique.
+• « Graduations tous les » (chaque axe) : Automatique, ou un pas de la liste (axe du
+  temps : 30 min, 1 h, 2 h, 6 h, 12 h, 1 jour ; autres axes : 0,5, 1, 5, 10…), ou un pas
+  saisi (« 15 min », « 1:30:00 », « 2 j », « 2,5 »). Appliqué tout de suite et mémorisé
+  pour les prochaines ouvertures. Si le pas est trop fin pour la période affichée, un
+  multiple du pas est utilisé ; en zoomant, le pas choisi revient.
 • Onglet Courbes : nom affiché dans la légende, couleur (cliquer sur la pastille),
   épaisseur, type de trait, marqueurs et « Valeur absolue |x| » de chaque voie. La
   valeur absolue ne change que l'affichage (graphique, image, rapport) : le CSV exporté
   garde les vraies valeurs signées ; elle est notée dans le journal.
 Par défaut, la légende affiche « Channel 1 (V) » et la température « Température
-ambiante » (numérotée s'il y en a plusieurs) ; le titre de l'axe Y regroupe les
+ambiante » (numérotée s'il y en a plusieurs) ; les voies d'un fichier d'enceinte
+climatique gardent leur vrai nom (« Channel 2 – M402-M210 (°C) ») ; le titre de l'axe Y regroupe les
 grandeurs tracées (« Tension (V) / Courant (mA) »). Un titre effacé revient au défaut.
 Les réglages restent quand vous cochez d'autres voies ou nettoyez, et sont repris dans
 l'image et le rapport PDF. La légende est toujours hors des courbes : à droite par
@@ -169,12 +197,18 @@ libellés et couleurs gardés) ; « Tout remettre par défaut » efface tout."""
 • Axes tab: chart title; start and end time (H:MM:SS, e.g. 1:30:00 or 48:00:00); for
   each Y axis (electrical signals, °C, %RH): min, max, label and linear or logarithmic
   scale. Empty field = automatic.
+• “Ticks every” (each axis): Automatic, or a step from the list (time axis: 30 min, 1 h,
+  2 h, 6 h, 12 h, 1 day; other axes: 0.5, 1, 5, 10…), or a typed step (“15 min”,
+  “1:30:00”, “2 d”, “2.5”). Applied at once and remembered for the next sessions. If the
+  step is too fine for the displayed period, a multiple of it is used; zooming in brings
+  the chosen step back.
 • Curves tab: name shown in the legend, colour (click the swatch), width, line style,
   markers and “Absolute value |x|” of each channel. The absolute value only changes the
   display (chart, image, report): the exported CSV keeps the real signed values; it is
   recorded in the log.
 By default, the legend shows “Channel 1 (V)” and the temperature “Ambient temperature”
-(numbered if there are several); the Y axis title groups the plotted quantities
+(numbered if there are several); channels of a climatic chamber file keep their real name
+(“Channel 2 – M402-M210 (°C)”); the Y axis title groups the plotted quantities
 (“Voltage (V) / Current (mA)”). A cleared title returns to the default.
 Settings are kept when you tick other channels or clean, and are used in the image and
 the PDF report. The legend is always outside the curves: on the right by default (several
