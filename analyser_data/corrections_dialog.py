@@ -138,6 +138,8 @@ class ShiftedChannelsDialog(tk.Toplevel):
             row += 1
             for ch in m.channels:
                 key = (m.name, ch.label)
+                if session.is_average(key):
+                    continue  # une moyenne suit ses voies (décalée si elles le sont toutes)
                 var = tk.BooleanVar(value=session.is_key_shifted(key))
                 ttk.Checkbutton(table, text=ch.label, variable=var, style="Card.TCheckbutton").grid(
                     row=row, column=0, sticky=tk.W, padx=(12, 6))

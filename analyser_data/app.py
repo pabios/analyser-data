@@ -78,6 +78,7 @@ class AnalyserDataApp:
             pass
         self._last_dir = str(EXAMPLES_DIR if EXAMPLES_DIR.is_dir() else Path.home())
         self.busy = False  # un traitement long tourne en arrière-plan
+        self._offset_redraw = None  # retracé différé des moyennes pendant le glissement du curseur
         self._action_buttons: List[ttk.Button] = []
 
         root.title("{}  (v{})".format(APP_TITLE, __version__))
@@ -951,8 +952,16 @@ class AnalyserDataApp:
         value = round(float(self.offset_var.get()) * 2) / 2  # pas de 0,5 min
         self.offset_var.set(value)
         self.lbl_offset.config(text=_("{:+.1f} min").format(value).replace(".", ",") if value else "0,0 min")
-        self.session.time_offset_min = value
+        averages_changed = self.session.set_time_offset(value)
         self.plot.set_time_offset(value)
+        if averages_changed:  # moyenne d'une voie décalée et d'une voie qui ne l'est pas : à retracer
+            if self._offset_redraw is not None:
+                self.root.after_cancel(self._offset_redraw)
+            self._offset_redraw = self.root.after(200, self._redraw_after_offset)
+
+    def _redraw_after_offset(self) -> None:
+        self._offset_redraw = None
+        self._redraw_with_view(self.plot.current_view())
 
     def _update_shifted_choices(self) -> None:
         """Rappel des voies qui suivent le curseur de décalage dans le temps."""

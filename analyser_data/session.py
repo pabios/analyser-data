@@ -532,7 +532,11 @@ class Session:
 
     def is_key_shifted(self, key: Key) -> bool:
         """La voie suit-elle le curseur de décalage dans le temps ? (issue #13) Par défaut :
-        les voies °C, quel que soit leur fichier ; sinon les voies choisies par l'utilisateur."""
+        les voies °C, quel que soit leur fichier ; sinon les voies choisies par l'utilisateur.
+        Une moyenne suit ses voies : décalée si elles le sont toutes."""
+        key = tuple(key)
+        if key in self.averages:
+            return all(self.is_key_shifted(source) for source in self.averages[key])
         if self.shifted_keys is not None:
             return key in self.shifted_keys
         return self.measurements[key[0]].channel(key[1]).quantity == TEMPERATURE
@@ -547,6 +551,7 @@ class Session:
         if keys == self.shifted_keys:
             return
         self.shifted_keys = keys
+        self._refresh_averages()
         if self.measurements:
             self.log(_("Décalage dans le temps appliqué à : {}").format(
                 ", ".join("{} [{}]".format(label, name) for name, label in self.shifted_channels())
@@ -687,6 +692,26 @@ class Session:
         if self.shifted_keys is not None:
             self.shifted_keys.discard(key)
 
+    def set_time_offset(self, minutes: float) -> bool:
+        """Curseur « Enceinte climatique ». Renvoie True si une moyenne a été recalculée (moyenne
+        d'une voie décalée et d'une voie qui ne l'est pas : à retracer)."""
+        minutes = float(minutes)
+        if minutes == self.time_offset_min:
+            return False
+        self.time_offset_min = minutes
+        if not self.mixed_shift_averages():
+            return False
+        self._refresh_averages()
+        return True
+
+    def mixed_shift_averages(self) -> List[Key]:
+        """Moyennes dont une partie seulement des voies suit le décalage dans le temps."""
+        return [key for key, sources in self.averages.items()
+                if len({self.is_key_shifted(s) for s in sources}) > 1]
+
+    def _shift_min(self, key: Key) -> float:
+        return self.time_offset_min if self.is_key_shifted(key) and not self.percent_axis else 0.0
+
     def is_average(self, key: Key) -> bool:
         return tuple(key) in self.averages
 
@@ -701,16 +726,20 @@ class Session:
                 continue
             m = self.measurements[name]
             x = m.data[TIME_COL].to_numpy(dtype=float)
-            stack = np.vstack([self._values_on_grid(source, name, x) for source in sources])
+            # Valeurs prises aux instants où elles sont AFFICHÉES : une voie décalée par le curseur
+            # « Enceinte climatique » est lue à x + décalage(moyenne) - décalage(voie)
+            stack = np.vstack([self._values_on_grid(source, name, x, self._shift_min(key) - self._shift_min(source))
+                               for source in sources])
             values = stack.mean(axis=0)  # NaN si une voie manque à cet instant
             m.data[label] = values
             self._raw[name][label] = values.copy()
 
-    def _values_on_grid(self, key: Key, host: str, x: np.ndarray) -> np.ndarray:
-        """Valeurs affichées de la voie, aux instants ``x`` du fichier ``host``."""
+    def _values_on_grid(self, key: Key, host: str, x: np.ndarray, delta_min: float = 0.0) -> np.ndarray:
+        """Valeurs affichées de la voie, aux instants ``x + delta_min`` du fichier ``host``."""
         y = self.displayed_values(key)
-        if key[0] == host:
+        if key[0] == host and not delta_min:
             return y
+        x = x + delta_min
         xs = self.measurements[key[0]].data[TIME_COL].to_numpy(dtype=float)
         ok = np.isfinite(xs)
         xs, y = xs[ok], y[ok]

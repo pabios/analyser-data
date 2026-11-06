@@ -467,6 +467,51 @@ def main():
     shot(root, "36_noms_clim.png")
     print("noms des voies clim : OK")
 
+    # Issue #16 : classeur d'enceinte (Date et Heure séparées) + moyennes °C / %HR + décalage
+    clim_xlsx = ROOT / "exemples" / "enceinte" / "enceinte_T_HR.xlsx"
+    gui.open_files([str(clim_xlsx)], preview=True)
+    dialog = next(w for w in root.winfo_children() if isinstance(w, ImportDialog))
+    end = time.time() + 60
+    while len(dialog.results) < 1 and time.time() < end:
+        root.update()
+        time.sleep(0.05)
+    pump(root)
+    clim = dialog.results[str(clim_xlsx)]
+    assert not isinstance(clim, str) and len(clim.data) == 1440 and abs(clim.period_s - 60) < 1e-6, clim
+    shot_window(dialog, "37_import_enceinte_excel.png")
+    dialog.accept()
+    pump(root)
+    enc = clim.name
+    kt = gui.session.add_average([(enc, "Consigne T (°C)"), (enc, "Température (°C)")])
+    kh = gui.session.add_average([(enc, "Consigne HR (%HR)"), (enc, "Humidité (%HR)")])
+    nano_t = (nano, "Channel 2")
+    # moyenne d'une voie décalée (Température) et d'une voie qui ne l'est pas (nanodac) : suit le curseur
+    gui.apply_shifted_channels([(enc, "Température (°C)")])
+    km = gui.session.add_average([(enc, "Température (°C)"), nano_t])
+    for k in gui._checked:
+        gui._checked[k] = k[0] == enc
+    for k in (kt, kh, km):
+        gui._checked[k] = True
+    gui._refresh_checkmarks()
+    gui._rebuild_tree()
+    gui.redraw()
+    pump(root)
+    before = gui.session.displayed_values(km).copy()
+    gui._set_offset(-4.0)
+    end = time.time() + 2
+    while time.time() < end:  # retracé différé (200 ms)
+        root.update()
+        time.sleep(0.05)
+    assert gui._offset_redraw is None
+    assert not np.allclose(before, gui.session.displayed_values(km), equal_nan=True), "moyenne non recalculée"
+    texts = [t.get_text() for t in gui.figure.legends[0].get_texts()]
+    assert kt[1] in texts and kh[1] in texts and km[1] in texts, texts
+    shot(root, "38_moyennes_enceinte.png")
+    gui._set_offset(0.0)
+    gui.apply_shifted_channels(None)
+    pump(root)
+    print("enceinte Excel + moyennes °C / %HR : OK")
+
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
     shot_window(help_window, "12_aide.png")
     help_window.destroy()

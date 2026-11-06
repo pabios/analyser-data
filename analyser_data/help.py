@@ -18,7 +18,10 @@ SECTIONS = [
    comment chaque fichier est lu (colonne temps, voies, premières lignes) : choisissez la
    feuille d'un classeur, ou imposez le séparateur si la détection s'est trompée, puis
    « Importer ». Préférez le fichier d'origine de l'appareil (Excel coupe au-delà de
-   1 048 576 lignes).
+   1 048 576 lignes). Classeur avec la date et l'heure dans deux colonnes (« Date »,
+   « Heure ») : elles sont réunies.
+   Fichiers pour essayer : dossier exemples (exemples/enceinte : enceinte climatique °C et
+   %HR en texte et en Excel ; exemples/autres_formats/GL860_test.GBD et son export CSV).
 2. Cochez les voies à afficher. Cliquer sur un nom de fichier coche / décoche toutes
    ses voies. Chaque voie s'affiche sous le nom de la centrale : « Channel 4 ».
 3. Nettoyez, corrigez, puis « Exporter » : seules les voies cochées sont exportées,
@@ -31,7 +34,10 @@ SECTIONS = [
    “,”, tab, “|” and spaces. The “Import” window shows how each file is read
    (time column, channels, first rows): choose a workbook's sheet, or force the
    separator if detection went wrong, then “Import”. Prefer the device's original file
-   (Excel truncates beyond 1,048,576 rows).
+   (Excel truncates beyond 1,048,576 rows). Workbook with the date and the time in two
+   columns (“Date”, “Heure”/“Time”): they are joined.
+   Files to try: the exemples folder (exemples/enceinte: climatic chamber °C and %RH as
+   text and Excel; exemples/autres_formats/GL860_test.GBD and its CSV export).
 2. Tick the channels to display. Clicking a file name ticks / unticks all its
    channels. Each channel is shown with the data logger name: “Channel 4”.
 3. Clean, correct, then “Export”: only ticked channels are exported, with their
@@ -131,7 +137,11 @@ recalcule quand elles changent ; elle ne se nettoie pas et ne se corrige pas au 
 elle-même. Si une voie manque à un instant, il n'y a pas de moyenne à cet instant.
 Voies de deux fichiers : celles du second sont interpolées sur les instants du premier,
 jamais à travers une interruption d'enregistrement. « Retirer » (même fenêtre) la
-supprime ; le journal garde la trace.""",
+supprime ; le journal garde la trace.
+Décalage « Enceinte climatique » : la moyenne suit ses voies. Si elles suivent toutes le
+curseur, la moyenne aussi ; sinon elle est recalculée avec les courbes telles qu'elles
+sont affichées (décalées ou non).
+Pour essayer : dossier exemples/enceinte (2 sondes °C et 2 sondes %HR).""",
      "Channel average", """\
 “Average…” button of the “Channels” card: tick at least two channels with the same unit
 (e.g. Channel 4 and Channel 5 in A, or two °C probes) then “Show the average”. A channel
@@ -143,7 +153,11 @@ recalculated when they change; it is not cleaned or click-corrected itself. If a
 is missing at an instant, there is no average at that instant.
 Channels from two files: those of the second are interpolated onto the timestamps of the
 first, never across a recording interruption. “Remove” (same window) deletes it; the log
-keeps a record."""),
+keeps a record.
+“Climatic chamber” shift: the average follows its channels. If they all follow the
+slider, so does the average; otherwise it is recalculated from the curves as they are
+displayed (shifted or not).
+To try it: folder exemples/enceinte (2 °C probes and 2 %RH probes)."""),
 
     ("Spectre FFT", "Spectre FFT", """\
 Bouton « FFT… » de la carte « Voies de mesure » : spectre d'amplitude des voies cochées

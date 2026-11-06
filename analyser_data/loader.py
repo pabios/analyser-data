@@ -58,6 +58,9 @@ _TIME_NAME_RE = re.compile(
 )
 _DATE_ONLY_NAME_RE = re.compile(r"^(date|datum|fecha)$", re.IGNORECASE)
 _SUBSECOND_NAME_RE = re.compile(r"^(ms|msec|us|µs)$", re.IGNORECASE)
+# Pas de groupe capturant : motifs passés à pandas (RE2 sous pyarrow)
+_MIDNIGHT_SUFFIX_RE = r"\s+00:00(?::00(?:\.0+)?)?$"
+_ISO_DAY_RE = r"\d{4}-\d{2}-\d{2}\s"
 _SUBSECOND_FACTOR = {"ms": 1e-3, "msec": 1e-3, "us": 1e-6, "µs": 1e-6}
 # Valeurs hors échelle écrites par les centrales à la place d'un nombre.
 # Attention : les motifs passés aux méthodes .str de pandas doivent rester compatibles
@@ -996,6 +999,8 @@ def _find_headers(rows, first_data, n_cols):
         return default, units, aliases
     candidate = [c.strip().strip('"') for c in rows[first_data - 1]]
     extra = []
+    if len(candidate) > n_cols:
+        candidate = _regroup_descriptors(candidate, n_cols)
     if len(candidate) > n_cols:  # descriptif en bout de ligne
         extra = [c for c in candidate[n_cols:] if c]
         candidate = candidate[:n_cols]
@@ -1027,6 +1032,34 @@ def _find_headers(rows, first_data, n_cols):
         if alias:
             aliases[value_cols[0]] = alias
     return headers, units, aliases
+
+
+def _is_unit_token(cell: str) -> bool:
+    unit = normalize_unit(cell.strip())
+    return bool(unit) and (quantity_of(unit) != OTHER or unit == "%")
+
+
+def _regroup_descriptors(cells: List[str], n_cols: int) -> List[str]:
+    """Descriptifs nanodac éclatés sur plusieurs cellules (classeur Excel coupé aussi au « ; »,
+    issue #16) : « Date/Heure | Channel 2 (ENAN2) | Group 1 | M402-M210 | °C | Channel 3 … | %HR »
+    -> « Date/Heure | Channel 2 (ENAN2);Group 1;M402-M210;°C | Channel 3 …;%HR ».
+
+    Ne regroupe que si chaque voie se termine par une unité et que le compte tombe juste ;
+    sinon les cellules sont rendues telles quelles."""
+    cells = list(cells)
+    while cells and not cells[-1]:
+        cells.pop()
+    if not cells or not _is_time_header(cells[0]):
+        return cells
+    groups, current = [], []
+    for c in cells[1:]:
+        current.append(c)
+        if _is_unit_token(c):
+            groups.append(";".join(x for x in current if x))
+            current = []
+    if current or len(groups) != n_cols - 1 or any(";" not in g for g in groups):
+        return cells
+    return [cells[0]] + groups
 
 
 def _split_descriptor(header: str) -> Tuple[str, str, str]:
@@ -1142,9 +1175,17 @@ def _extract_time(raw: pd.DataFrame, decimal: str, filename: str):
     # Date et heure dans deux colonnes séparées ("Date" ; "Heure")
     if _DATE_ONLY_NAME_RE.match(names[main]) and len(time_cols) > 1:
         other = time_cols[1]
-        if (not raw[main].str.contains(":", regex=False, na=False).any()
-                and raw[other].str.contains(":", regex=False, na=False).any()):
-            series = raw[main].fillna("") + " " + raw[other].fillna("")
+        dates = raw[main].fillna("")
+        # Classeur Excel (issue #16) : une cellule date est lue « 2026-11-02 00:00:00.000 »
+        dates = dates.str.replace(_MIDNIGHT_SUFFIX_RE, "", regex=True) \
+            if dates.head(200).str.contains(_MIDNIGHT_SUFFIX_RE, regex=True).any() else dates
+        clock = raw[other].fillna("")
+        if (not dates.str.contains(":", regex=False).any()
+                and clock.str.contains(":", regex=False).any()):
+            if clock[clock != ""].head(200).str.match(_ISO_DAY_RE).mean() > 0.9:
+                series = clock  # la colonne « Heure » contient déjà la date complète
+            else:
+                series = dates + " " + clock
             used.add(other)
 
     seconds, start, counter = _parse_time(series, main, decimal, filename)

@@ -47,7 +47,8 @@ python main.py
    « Channel 4 (A) », température « Température ambiante » en rouge).
    Bouton **Moyenne…** : moyenne point par point de deux voies (ou plus) de même unité,
    ajoutée comme une voie de plus (« Moyenne Channel 4 / Channel 5 (A) ») ; voie calculée,
-   les mesures d'origine ne changent pas.
+   les mesures d'origine ne changent pas. Elle suit le décalage « Enceinte climatique » de ses
+   voies (moyenne des courbes telles qu'affichées).
    Bouton **FFT…** : spectre d'amplitude des voies cochées (zone affichée ou tout l'essai),
    pic principal, export CSV et image. Les voies d'un fichier d'enceinte climatique
    gardent leur vrai nom dans la légende (« Channel 2 – M402-M210 (°C) »).
@@ -110,7 +111,13 @@ Réglage **Base de temps** :
 Prévu pour les enregistreurs **Graphtec GL980 / GL860** (export CSV avec bloc
 « AMP settings », colonnes Date / Time / us, valeurs hors échelle `+++++++`) et
 **Eurotherm nanodac** (date en texte ou en nombre Excel, unité dans le descriptif de voie).
-Des maquettes calquées sur de vrais exports sont fournies dans `exemples/`.
+Des maquettes calquées sur de vrais exports sont fournies dans `exemples/` :
+- `exemples/enceinte/` : essai climatique de 24 h (2 sondes °C, 2 sondes %HR) au format nanodac
+  (`.txt` et `.xlsx`) et export d'enceinte sous Excel avec « Date » et « Heure » séparées ;
+- `exemples/autres_formats/GL860_test.GBD` et `GL860_test_export.CSV` : les mêmes mesures en
+  fichier natif Graphtec et en CSV (elles doivent donner les mêmes courbes). Ce `.GBD` est écrit
+  d'après la spécification Graphtec : seul un `.GBD` enregistré par l'appareil valide vraiment
+  la lecture (comparer avec son export CSV).
 
 Les gros fichiers (plusieurs millions de lignes) sont lus en quelques secondes, avec un
 indicateur de chargement.
