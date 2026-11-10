@@ -19,7 +19,7 @@ from .cleaning import (
 )
 from .editing import interpolate_at
 from .export import Key, merge_selection, write_csv
-from .loader import TIME_COL, LoadError, Measurement, align_time_axes, load_measurement
+from .loader import TIME_COL, TIME_UNIT_NAMES, LoadError, Measurement, align_time_axes, load_measurement
 from .channels import HUMIDITY, OTHER, TEMPERATURE, Channel
 from .cycles import Cycle, Edit, assemble, assemble_time, detect_cycles, fundamental, plan, spectral_f0, synthetic_mask
 from .plotting import PlotSeries, format_hms
@@ -127,7 +127,7 @@ class Session:
     ) -> Tuple[List[Measurement], List[Tuple[Path, str]]]:
         """Lit les fichiers sans modifier la session (peut tourner en arrière-plan).
 
-        ``options[str(chemin)]`` : réglages d'import imposés (``sep``, ``sheet``).
+        ``options[str(chemin)]`` : réglages d'import imposés (``sep``, ``sheet``, ``time_unit``).
         Renvoie (fichiers chargés, [(chemin, message d'erreur)]).
         """
         paths = list(paths)
@@ -155,6 +155,9 @@ class Session:
                 _(" · du {} au {}").format(m.start.strftime("%d/%m/%Y %H:%M:%S"), end.strftime("%d/%m/%Y %H:%M:%S"))
                 if end is not None else "",
                 ", ".join(ch.label for ch in m.channels)))
+            if m.time_unit:  # choix de l'utilisateur dans la fenêtre Import (issue #18) : tracé
+                self.log(_("Unité du temps imposée à l'import pour {} : {}.").format(
+                    m.name, _(TIME_UNIT_NAMES[m.time_unit])))
             for text in self.corrections_summary([(m.name, ch.label) for ch in m.channels]):
                 self.log(text)
         self._realign()

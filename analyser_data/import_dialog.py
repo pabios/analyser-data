@@ -1,8 +1,9 @@
 """Fenêtre « Import » : aperçu de la lecture de chaque fichier avant de l'importer (issue #10).
 
 Pour chaque fichier : format reconnu, colonne temps, voies et unités, premières lignes lues.
-On peut y choisir la feuille d'un classeur Excel, ou imposer le séparateur d'un fichier texte
-si la détection automatique s'est trompée ; le fichier est alors relu. Les lectures se font en
+On peut y choisir la feuille d'un classeur Excel, imposer le séparateur d'un fichier texte
+si la détection automatique s'est trompée, ou l'unité d'une colonne temps écrite en nombres
+sans unité (issue #18 : ms d'un export SEFRAM) ; le fichier est alors relu. Les lectures se font en
 arrière-plan : la fenêtre ne se fige jamais.
 """
 from __future__ import annotations
@@ -36,6 +37,8 @@ SEPARATOR_CHOICES = {
     "|": "Barre verticale « | »",
     SPACE: "Espaces",
 }
+# Colonne temps en nombres sans unité écrite (issue #18 : export CSV SEFRAM en ms)
+TIME_UNIT_CHOICES = {None: "Automatique", "ms": "Millisecondes (ms)", "s": "Secondes (s)", "min": "Minutes (min)"}
 SEPARATOR_NAMES = {";": "« ; »", ",": "« , »", "\t": "tabulation", "|": "« | »", SPACE: "espaces"}
 PREVIEW_ROWS = 8
 SETTING = "import_preview"
@@ -102,6 +105,12 @@ class ImportDialog(tk.Toplevel):
                                     values=[_(v) for v in SEPARATOR_CHOICES.values()])
         self.sep_box.bind("<<ComboboxSelected>>", lambda _e: self._option_changed(
             "sep", next(k for k, v in SEPARATOR_CHOICES.items() if _(v) == self.sep_var.get())))
+        self.unit_label = ttk.Label(row, text=_("Unité du temps"), style="Card.TLabel")
+        self.unit_var = tk.StringVar()
+        self.unit_box = ttk.Combobox(row, textvariable=self.unit_var, state="readonly", width=16,
+                                     values=[_(v) for v in TIME_UNIT_CHOICES.values()])
+        self.unit_box.bind("<<ComboboxSelected>>", lambda _e: self._option_changed(
+            "time_unit", next(k for k, v in TIME_UNIT_CHOICES.items() if _(v) == self.unit_var.get())))
         self.info = ttk.Label(self.detail, style="Card.TLabel", justify=tk.LEFT, wraplength=700)
         self.info.pack(anchor=tk.W, fill=tk.X)
         self.table = ttk.Treeview(self.detail, show="headings", height=PREVIEW_ROWS)
@@ -177,7 +186,7 @@ class ImportDialog(tk.Toplevel):
             return
         key = self.files.selection()[0]
         path = Path(key)
-        for widget in (self.sheet_label, self.sheet_box, self.sep_label, self.sep_box):
+        for widget in (self.sheet_label, self.sheet_box, self.sep_label, self.sep_box, self.unit_label, self.unit_box):
             widget.pack_forget()
         if is_gbd(path):
             pass  # binaire Graphtec : ni feuille ni séparateur à choisir
@@ -191,6 +200,11 @@ class ImportDialog(tk.Toplevel):
             self.sep_label.pack(side=tk.LEFT, padx=(0, 6))
             self.sep_box.pack(side=tk.LEFT)
             self.sep_var.set(_(SEPARATOR_CHOICES[self.options[key].get("sep")]))
+        if not is_gbd(path):
+            # temps écoulé en nombres sans unité écrite : secondes supposées, sinon choisir ici
+            self.unit_label.pack(side=tk.LEFT, padx=(16, 6))
+            self.unit_box.pack(side=tk.LEFT)
+            self.unit_var.set(_(TIME_UNIT_CHOICES[self.options[key].get("time_unit")]))
 
         result = self.results.get(key)
         self.table.delete(*self.table.get_children())

@@ -510,6 +510,36 @@ def main():
     gui._set_offset(0.0)
     gui.apply_shifted_channels(None)
     pump(root)
+
+    # Issue #18 : export CSV SEFRAM DAS1400, temps en ms sans unité -> « Unité du temps : ms »
+    sefram = OUT / "shock_B____0001.csv"
+    sefram.write_text("Temps;U_supply (V);U_card (V);I_SMD (A);I_ICD (A)\n" + "".join(
+        "{};14,1;{};0,40;-0,005\n".format(i * 100, "13,3" if i % 60 < 30 else "0,05") for i in range(5618)),
+        encoding="cp1252")
+    gui.open_files([str(sefram)], preview=True)
+    dialog = next(w for w in root.winfo_children() if isinstance(w, ImportDialog))
+
+    def wait_sefram():
+        end = time.time() + 60
+        while str(sefram) not in dialog.results and time.time() < end:
+            root.update()
+            time.sleep(0.05)
+        pump(root)
+
+    wait_sefram()
+    assert abs(dialog.results[str(sefram)].period_s - 100) < 1e-6  # automatique : secondes supposées
+    dialog.files.selection_set(str(sefram))
+    dialog.unit_var.set("Millisecondes (ms)")
+    dialog._option_changed("time_unit", "ms")
+    wait_sefram()
+    m = dialog.results[str(sefram)]
+    assert abs(m.period_s - 0.1) < 1e-9 and abs(m.duration_min * 60 - 561.7) < 1e-6, m.period_s
+    assert dialog.unit_box.winfo_ismapped()
+    shot_window(dialog, "39_import_unite_temps.png")
+    dialog.accept()
+    pump(root)
+    assert any("Unité du temps imposée" in text for _t, text in gui.session.journal)
+    print("unité du temps (SEFRAM ms) : OK")
     print("enceinte Excel + moyennes °C / %HR : OK")
 
     help_window = app_module.HelpWindow.open(root, "Nettoyage")

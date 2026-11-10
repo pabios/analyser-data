@@ -42,7 +42,9 @@ python main.py
 1. **Ouvrir des fichiers…** : CSV, TXT, DAT, TSV, classeur **Excel** (XLSX, XLS), JSON, Parquet ou
    fichier natif **Graphtec .GBD**. La fenêtre
    **Import** montre comment chaque fichier est lu (temps, voies, premières lignes) ; on y
-   choisit la feuille d'un classeur ou on impose le séparateur. Essayer le dossier `exemples/`.
+   choisit la feuille d'un classeur, on impose le séparateur, ou l'**unité du temps** quand la
+   colonne temps est en nombres sans unité (ex. export CSV **SEFRAM DAS1400** en ms : par défaut
+   l'appli suppose des secondes). Essayer le dossier `exemples/`.
 2. Cocher les voies à afficher (elles portent le nom de la centrale : « Channel 4 » ; légende
    « Channel 4 (A) », température « Température ambiante » en rouge).
    Bouton **Moyenne…** : moyenne point par point de deux voies (ou plus) de même unité,
@@ -125,7 +127,9 @@ indicateur de chargement.
 Les fichiers bruts de l'appareil s'ouvrent directement, sans passer par Excel : séparateur
 `,` `;`, tabulation, `|` ou espaces et décimale `.` ou `,` dans toutes les combinaisons (y compris
 `,` + `,`), avec ou sans guillemets, utf-8 / cp1252 / utf-16, fichiers réenregistrés par Excel.
-Temps en date/heure, `H:MM:SS`, ms, s ou min. Tout est détecté automatiquement.
+Temps en date/heure, `H:MM:SS`, ms, s ou min. Tout est détecté automatiquement ; un temps en
+nombres sans unité écrite est lu en secondes, sauf si une autre unité est choisie dans la fenêtre
+**Import**.
 
 Un fichier ne s'ouvre pas ? L'application propose d'en **enregistrer un extrait** (début et fin,
 quelques Ko) : joignez-le à une issue.

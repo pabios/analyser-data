@@ -95,6 +95,8 @@ _DATETIME_LIKE_RE = re.compile(r"^\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}|^\d{1,3}:\d{
 _DURATION_RE = re.compile(r"^\d+:\d{2}:\d{2}([.,]\d+)?$")
 _COMMA_SECONDS_RE = re.compile(r":\d{2},\d+$")
 _YEAR_FIRST_RE = re.compile(r"^\d{4}[/\-.]")
+# Unités proposées dans la fenêtre Import pour une colonne temps sans unité écrite (issue #18)
+TIME_UNIT_NAMES = {"ms": "millisecondes", "s": "secondes", "min": "minutes"}
 _TIME_UNITS_S = {"ms": 1e-3, "msec": 1e-3, "s": 1.0, "sec": 1.0, "min": 60.0, "h": 3600.0}
 
 _SOURCES = (
@@ -129,6 +131,7 @@ class Measurement:
     align_note: str = ""  # explication si le fichier n'a pas pu être recalé sur la référence
     warnings: List[str] = field(default_factory=list)
     sheet: str = ""  # feuille Excel lue (classeurs .xlsx / .xls)
+    time_unit: str = ""  # unité du temps imposée à l'import (« ms », « s », « min »), issue #18
 
     @property
     def duration_min(self) -> float:
@@ -161,7 +164,7 @@ class Measurement:
 
 def load_measurement(
     path, name: Optional[str] = None, progress: Optional[Callable[[str], None]] = None,
-    sep: Optional[str] = None, sheet: Optional[str] = None,
+    sep: Optional[str] = None, sheet: Optional[str] = None, time_unit: Optional[str] = None,
 ) -> Measurement:
     """Charge un fichier de mesure (texte ou classeur Excel). Lève :class:`LoadError` si le
     fichier est non conforme.
@@ -169,6 +172,8 @@ def load_measurement(
     ``progress(message)`` est appelé à chaque étape (lecture, conversion...).
     ``sep`` : séparateur imposé (« ; », « , », tabulation, espace) au lieu de la détection.
     ``sheet`` : feuille d'un classeur Excel (par défaut : la première).
+    ``time_unit`` : unité d'une colonne temps en nombres sans unité écrite (« ms », « s », « min »),
+    au lieu des secondes supposées (issue #18 : export CSV SEFRAM en ms). Sans effet sur une date/heure.
     """
     path = Path(path)
     name = name or path.name
@@ -183,15 +188,15 @@ def load_measurement(
         if is_gbd(path):
             return _load_gbd(path, name, progress)
         if suffix in TABLE_SUFFIXES:
-            return _load_via_csv(path, name, progress, _table_rows(path, progress), "")
+            return _load_via_csv(path, name, progress, _table_rows(path, progress), "", time_unit)
         if suffix in UNSUPPORTED_SUFFIXES:
             raise LoadError(_("Le format « {} » du fichier « {} » n'est pas pris en charge. Formats acceptés : "
                               "CSV, TXT, DAT, TSV (texte), Excel XLSX, XLS, JSON et Parquet.").format(suffix, path.name))
         if is_excel(path):
-            return _load_excel(path, name, progress, sheet)
+            return _load_excel(path, name, progress, sheet, time_unit)
         if sep == SPACE:
-            return _load_via_csv(path, name, progress, _space_rows(path), "")
-        return _load(path, name, progress, sep)
+            return _load_via_csv(path, name, progress, _space_rows(path), "", time_unit)
+        return _load(path, name, progress, sep, time_unit)
     except LoadError:
         raise
     except ExcelError as exc:
@@ -265,18 +270,19 @@ HEAD_BYTES = 2 * 1024 * 1024  # début du fichier analysé (préambule + premiè
 TAIL_BYTES = 256 * 1024  # fin du fichier analysée (séparateur, nombre de colonnes)
 
 
-def _load_excel(path: Path, name: str, progress: Callable[[str], None], sheet: Optional[str]) -> Measurement:
+def _load_excel(path: Path, name: str, progress: Callable[[str], None], sheet: Optional[str],
+                time_unit: Optional[str] = None) -> Measurement:
     """Classeur Excel : la feuille est écrite en CSV temporaire, puis lue comme un fichier texte."""
     names = sheet_names(path)
     sheet = sheet or (names[0] if names else None)
     rows = ([format_cell(v) for v in row] for row in read_rows(path, sheet, progress))
-    m = _load_via_csv(path, name, progress, rows, sheet)
+    m = _load_via_csv(path, name, progress, rows, sheet, time_unit)
     if len(names) > 1:
         m.warnings.insert(0, _("Feuille « {} » ({} feuilles dans le classeur).").format(sheet, len(names)))
     return m
 
 
-def _load_via_csv(path: Path, name: str, progress, rows, sheet: str) -> Measurement:
+def _load_via_csv(path: Path, name: str, progress, rows, sheet: str, time_unit: Optional[str] = None) -> Measurement:
     """Lignes déjà découpées (Excel, colonnes séparées par des espaces) -> CSV « ; » temporaire."""
     fd, temp = tempfile.mkstemp(suffix=".csv", prefix="analyser_data_")
     try:
@@ -291,7 +297,7 @@ def _load_via_csv(path: Path, name: str, progress, rows, sheet: str) -> Measurem
         if not count:
             raise LoadError(_("Le fichier « {} » est vide.").format(path.name))
         try:
-            m = _load(Path(temp), name, progress, ";")
+            m = _load(Path(temp), name, progress, ";", time_unit)
         except LoadError as exc:  # messages : nom du fichier d'origine, pas du CSV temporaire
             raise LoadError(str(exc).replace(Path(temp).name, path.name)) from None
     finally:
@@ -373,7 +379,8 @@ def _space_rows(path: Path):
                 yield line.split()
 
 
-def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Optional[str] = None) -> Measurement:
+def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Optional[str] = None,
+          time_unit: Optional[str] = None) -> Measurement:
     if not path.is_file():
         raise LoadError(_("Fichier introuvable : {}").format(path))
     size_mb = path.stat().st_size / 1e6
@@ -436,7 +443,7 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
         raw = raw[raw.notna().sum(axis=1) >= 3].reset_index(drop=True)
 
     progress(_("Conversion du temps de {}…").format(path.name))
-    time_s, start, used_cols, counter = _extract_time(raw, decimal, path.name)
+    time_s, start, used_cols, counter, unit_forced, unit_note = _extract_time(raw, decimal, path.name, time_unit)
     period_declared = _declared_sampling(head_rows[:first_data])
     counter_note = ""
     if counter:
@@ -453,7 +460,9 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
     time_s, rebuilt = _rebuild_coarse_time(time_s, period_declared)
     # Issue #15 : temps lu incohérent avec l'en-tête (période × nombre de points, début / fin) :
     # l'en-tête de l'enregistreur fait foi (ex. durée ×10)
-    time_s, scale_note = _check_against_header(time_s, head_rows[:first_data], period_declared)
+    scale_note = ""
+    if not unit_forced:  # unité choisie par l'utilisateur : elle fait foi
+        time_s, scale_note = _check_against_header(time_s, head_rows[:first_data], period_declared)
 
     # Voies de mesure : toutes les autres colonnes numériques
     numeric_cols = []
@@ -511,7 +520,7 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
     if df.empty:
         raise LoadError(_("La colonne temps du fichier « {} » est illisible.").format(path.name))
 
-    msgs = []
+    msgs = [unit_note] if unit_note else []
     declared = _declared_count(head_rows[:first_data])
     if declared and declared > len(df) * 1.001 + 1:
         msgs.append(
@@ -557,6 +566,7 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
         period_s=period_s,
         start=start,
         warnings=msgs,
+        time_unit=time_unit if unit_forced else "",
     )
 
 
@@ -1160,8 +1170,9 @@ def _to_numeric(series: pd.Series, decimal: str) -> pd.Series:
     return pd.to_numeric(s, errors="coerce")
 
 
-def _extract_time(raw: pd.DataFrame, decimal: str, filename: str):
-    """Renvoie (temps écoulé en secondes, horodatage de départ ou None, colonnes utilisées)."""
+def _extract_time(raw: pd.DataFrame, decimal: str, filename: str, time_unit: Optional[str] = None):
+    """Renvoie (temps écoulé en secondes, horodatage de départ ou None, colonnes utilisées,
+    compteur d'échantillons détecté, unité imposée appliquée ou non, note sur cette unité)."""
     cols = list(raw.columns)
     names = {c: split_name_unit(c)[0] for c in cols}
     time_cols = [c for c in cols if _TIME_NAME_RE.search(names[c]) and not _SUBSECOND_NAME_RE.match(names[c])]
@@ -1194,7 +1205,18 @@ def _extract_time(raw: pd.DataFrame, decimal: str, filename: str):
                 series = dates + " " + clock
             used.add(other)
 
-    seconds, start, counter = _parse_time(series, main, decimal, filename)
+    unit_note = ""
+    if time_unit:
+        sample = series.dropna().astype(str).str.strip().str.lstrip("'")
+        sample = sample[sample != ""].head(200)
+        if len(sample) and _to_numeric(sample, decimal).notna().mean() > 0.9:
+            unit_note = _(
+                "Unité du temps imposée à l'import : colonne « {} » lue en {}.").format(main, _(TIME_UNIT_NAMES[time_unit]))
+        else:
+            unit_note = _("Unité du temps « {} » ignorée : la colonne « {} » contient des dates / heures, "
+                          "pas un temps écoulé en nombres.").format(_(TIME_UNIT_NAMES[time_unit]), main)
+            time_unit = None
+    seconds, start, counter = _parse_time(series, main, decimal, filename, time_unit)
     if counter and _TIME_NAME_RE.search(names[main]) and not _COUNTER_NAME_RE.search(names[main]):
         counter = False  # « Temps » en secondes entières : c'est bien un temps
 
@@ -1212,10 +1234,10 @@ def _extract_time(raw: pd.DataFrame, decimal: str, filename: str):
             head = raw[c].dropna().head(200)
             if _to_numeric(head, decimal).notna().mean() < 0.5:
                 used.add(c)
-    return seconds, start, used, (main if counter else "")
+    return seconds, start, used, (main if counter else ""), bool(time_unit), unit_note
 
 
-def _parse_time(series: pd.Series, header: str, decimal: str, filename: str):
+def _parse_time(series: pd.Series, header: str, decimal: str, filename: str, time_unit: Optional[str] = None):
     name, unit = split_name_unit(header)
     s = series.fillna("").astype(str)
     # Le type de la colonne est décidé sur un échantillon : les traitements de texte
@@ -1234,6 +1256,8 @@ def _parse_time(series: pd.Series, header: str, decimal: str, filename: str):
         diffs = np.diff(values[np.isfinite(values)])
         step = float(np.median(diffs)) if len(diffs) else 0.0
         unit_key = unit.lower()
+        if time_unit:  # choisie dans la fenêtre Import (issue #18)
+            return (values - first) * _TIME_UNITS_S[time_unit], None, False
         if unit_key in _TIME_UNITS_S:
             factor = _TIME_UNITS_S[unit_key]
         elif re.search(r"\bms\b|_ms$", name, re.IGNORECASE):

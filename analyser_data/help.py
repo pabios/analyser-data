@@ -20,6 +20,10 @@ SECTIONS = [
    « Importer ». Préférez le fichier d'origine de l'appareil (Excel coupe au-delà de
    1 048 576 lignes). Classeur avec la date et l'heure dans deux colonnes (« Date »,
    « Heure ») : elles sont réunies.
+   Temps écrit en nombres sans unité (0, 100, 200… d'un export SEFRAM) : l'appli suppose
+   des secondes. Vérifiez la « Durée » affichée ; si elle est fausse, choisissez l'« Unité du
+   temps » (millisecondes, secondes, minutes) dans la fenêtre « Import ». Le choix est noté
+   dans le journal ; les mesures ne changent pas.
    Fichiers pour essayer : dossier exemples (exemples/enceinte : enceinte climatique °C et
    %HR en texte et en Excel ; exemples/autres_formats/GL860_test.GBD et son export CSV).
 2. Cochez les voies à afficher. Cliquer sur un nom de fichier coche / décoche toutes
@@ -36,6 +40,10 @@ SECTIONS = [
    separator if detection went wrong, then “Import”. Prefer the device's original file
    (Excel truncates beyond 1,048,576 rows). Workbook with the date and the time in two
    columns (“Date”, “Heure”/“Time”): they are joined.
+   Time written as numbers without a unit (0, 100, 200… from a SEFRAM export): seconds are
+   assumed. Check the “Duration” shown; if it is wrong, choose the “Time unit”
+   (milliseconds, seconds, minutes) in the “Import” window. The choice is written in the
+   log; the measurements do not change.
    Files to try: the exemples folder (exemples/enceinte: climatic chamber °C and %RH as
    text and Excel; exemples/autres_formats/GL860_test.GBD and its CSV export).
 2. Tick the channels to display. Clicking a file name ticks / unticks all its

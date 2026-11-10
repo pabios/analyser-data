@@ -548,4 +548,15 @@ EN = {
     "Image du spectre exportée : {}": "Spectrum image exported: {}",
     "Temps constant : impossible de calculer un spectre.": "Constant time: cannot calculate a spectrum.",
     "Trop peu de points mesurés pour calculer un spectre (au moins {}).": "Too few measured points to calculate a spectrum (at least {}).",
+    # Unité du temps imposée à l'import (issue #18)
+    "Unité du temps": "Time unit",
+    "Millisecondes (ms)": "Milliseconds (ms)",
+    "Secondes (s)": "Seconds (s)",
+    "Minutes (min)": "Minutes (min)",
+    "millisecondes": "milliseconds",
+    "secondes": "seconds",
+    "minutes": "minutes",
+    "Unité du temps imposée à l'import : colonne « {} » lue en {}.": "Time unit set at import: column “{}” read in {}.",
+    "Unité du temps « {} » ignorée : la colonne « {} » contient des dates / heures, pas un temps écoulé en nombres.": "Time unit “{}” ignored: column “{}” holds dates / times, not an elapsed time in numbers.",
+    "Unité du temps imposée à l'import pour {} : {}.": "Time unit set at import for {}: {}.",
 }
