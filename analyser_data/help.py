@@ -198,10 +198,12 @@ gauche de la disquette) :
   48:00:00) ; pour chaque axe Y (signaux électriques, °C, %HR) : min, max, libellé et
   échelle linéaire ou logarithmique. Champ vide = automatique.
 • « Graduations tous les » (chaque axe) : Automatique, ou un pas de la liste (axe du
-  temps : 30 min, 1 h, 2 h, 6 h, 12 h, 1 jour ; autres axes : 0,5, 1, 5, 10…), ou un pas
-  saisi (« 15 min », « 1:30:00 », « 2 j », « 2,5 »). Appliqué tout de suite et mémorisé
-  pour les prochaines ouvertures. Si le pas est trop fin pour la période affichée, un
-  multiple du pas est utilisé ; en zoomant, le pas choisi revient.
+  temps : 1 s, 5 s, 10 s, 30 s, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 1 h, 2 h, 6 h,
+  12 h, 1 jour ; autres axes : 0,5, 1, 5, 10…), ou un pas saisi (« 20 min », « 1:30:00 »,
+  « 2 j », « 2,5 » ; 1 s au minimum pour le temps). Appliqué tout de suite et mémorisé
+  pour les prochaines ouvertures. Si les étiquettes se chevaucheraient (pas fin sur une
+  longue période), elles passent à un multiple rond du pas (ex. 10 s -> toutes les 2 min)
+  et de petites graduations restent au pas choisi ; en zoomant, le pas choisi revient.
 • Onglet Courbes : nom affiché dans la légende, couleur (cliquer sur la pastille),
   épaisseur, type de trait, marqueurs et « Valeur absolue |x| » de chaque voie. La
   valeur absolue ne change que l'affichage (graphique, image, rapport) : le CSV exporté
@@ -223,11 +225,13 @@ libellés et couleurs gardés) ; « Tout remettre par défaut » efface tout."""
 • Axes tab: chart title; start and end time (H:MM:SS, e.g. 1:30:00 or 48:00:00); for
   each Y axis (electrical signals, °C, %RH): min, max, label and linear or logarithmic
   scale. Empty field = automatic.
-• “Ticks every” (each axis): Automatic, or a step from the list (time axis: 30 min, 1 h,
-  2 h, 6 h, 12 h, 1 day; other axes: 0.5, 1, 5, 10…), or a typed step (“15 min”,
-  “1:30:00”, “2 d”, “2.5”). Applied at once and remembered for the next sessions. If the
-  step is too fine for the displayed period, a multiple of it is used; zooming in brings
-  the chosen step back.
+• “Ticks every” (each axis): Automatic, or a step from the list (time axis: 1 s, 5 s,
+  10 s, 30 s, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 1 h, 2 h, 6 h, 12 h, 1 day;
+  other axes: 0.5, 1, 5, 10…), or a typed step (“20 min”, “1:30:00”, “2 d”, “2.5”;
+  1 s minimum for time). Applied at once and remembered for the next sessions. If the
+  labels would overlap (fine step over a long period), they move to a round multiple of
+  the step (e.g. 10 s -> every 2 min) and small ticks stay at the chosen step; zooming in
+  brings the chosen step back.
 • Curves tab: name shown in the legend, colour (click the swatch), width, line style,
   markers and “Absolute value |x|” of each channel. The absolute value only changes the
   display (chart, image, report): the exported CSV keeps the real signed values; it is

@@ -539,6 +539,30 @@ def main():
     dialog.accept()
     pump(root)
     assert any("Unité du temps imposée" in text for _t, text in gui.session.journal)
+    # Graduations de l'axe X plus fines que 30 min (demande du 2026-11-13) : 10 s sur l'essai de 9 min
+    for k in gui._checked:
+        gui._checked[k] = k[0] == m.name
+    gui._refresh_checkmarks()
+    gui._rebuild_tree()
+    gui.redraw()
+    pump(root)
+    axes_dialog = AxesDialog(gui, gui.selected_keys())
+    pump(root)
+    axes_dialog.x_step.set("10 s")
+    assert axes_dialog.apply()
+    axes_dialog.destroy()
+    pump(root)
+    ax = gui.plot.axes["main"]
+    ticks = ax.get_xticks()
+    # étiquettes à une durée ronde multiple de 10 s (lisibles), petites graduations toutes les 10 s
+    assert round(np.diff(ticks)[0] * 60) in (10, 20, 30, 60, 120), ticks
+    every = np.union1d(np.round(ticks, 9), np.round(ax.xaxis.get_minorticklocs(), 9))
+    assert np.allclose(np.diff(every) * 60, 10.0), every
+    boxes = [t.get_window_extent() for t in ax.get_xticklabels() if t.get_text()]
+    assert all(a.x1 <= b.x0 for a, b in zip(boxes, boxes[1:])), "étiquettes du temps superposées"
+    shot(root, "42_graduations_10s.png")
+    gui.apply_plot_settings(app_module.initial_plot_settings().__class__())
+    pump(root)
     print("unité du temps (SEFRAM ms) : OK")
 
     # Issue #18 : fichier nanodac pression + température -> voie mbar reconnue, axe titré

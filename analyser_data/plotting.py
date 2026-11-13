@@ -141,7 +141,9 @@ def format_axis_time(minutes: float, _pos=None) -> str:
 
 
 # Pas de graduation proposés (issue #17) ; None : automatique. Axe du temps : en minutes.
-TIME_TICK_STEPS = {None: "Automatique", 30.0: "30 min", 60.0: "1 h", 120.0: "2 h", 360.0: "6 h", 720.0: "12 h",
+# Pas en minutes ; de 1 s à 15 min pour les essais courts (issue #16, demande du 2026-11-13)
+TIME_TICK_STEPS = {None: "Automatique", 1 / 60: "1 s", 5 / 60: "5 s", 10 / 60: "10 s", 0.5: "30 s", 1.0: "1 min",
+                   2.0: "2 min", 5.0: "5 min", 10.0: "10 min", 15.0: "15 min", 30.0: "30 min", 60.0: "1 h", 120.0: "2 h", 360.0: "6 h", 720.0: "12 h",
                    1440.0: "1 jour"}
 VALUE_TICK_STEPS = {None: "Automatique", 0.1: "0,1", 0.5: "0,5", 1.0: "1", 2.0: "2", 5.0: "5", 10.0: "10",
                     20.0: "20", 50.0: "50", 100.0: "100"}
@@ -161,7 +163,7 @@ def parse_tick_step(text: str, time_axis: bool) -> Optional[float]:
             return value
     if not text:
         return None
-    message = (_("Pas de graduation invalide : « {} » (ex. 30 min, 1 h, 1:30:00, 1 jour).") if time_axis
+    message = (_("Pas de graduation invalide : « {} » (ex. 10 s, 5 min, 1 h, 1:30:00, 1 jour).") if time_axis
                else _("Pas de graduation invalide : « {} » (ex. 5 ou 0,5).")).format(text)
     value = None
     if time_axis:
@@ -189,6 +191,8 @@ def parse_tick_step(text: str, time_axis: bool) -> Optional[float]:
             raise ValueError(message) from None
     if value is None or not math.isfinite(value) or value <= 0:
         raise ValueError(message)
+    if time_axis and value < 1 / 60 - 1e-9:  # graduations en H:MM:SS : moins d'1 s, étiquettes identiques
+        raise ValueError(_("Pas de graduation trop petit : « {} » (1 s au minimum).").format(text))
     return value
 
 
@@ -208,26 +212,59 @@ def format_tick_step(value: Optional[float], time_axis: bool) -> str:
 class StepLocator(Locator):
     """Graduations à un pas choisi par l'utilisateur, alignées sur ses multiples (0, 1 h, 2 h…).
 
-    Si le pas donnerait plus de ``MAX_TICKS`` graduations (dézoom sur un long essai), on
-    garde un multiple du pas pour rester lisible ; en zoomant, le pas choisi revient."""
+    Si le pas donnerait des étiquettes qui se chevauchent (pas fin sur un long essai, ex.
+    10 s sur 9 min), les étiquettes passent à un multiple « rond » du pas (×2, ×3, ×6…) ;
+    ``minor=True`` : graduations sans étiquette au pas exact, pour garder le pas choisi
+    visible. En zoomant, le pas choisi revient sur les étiquettes."""
 
-    def __init__(self, step: float):
+    def __init__(self, step: float, minor: bool = False, label_chars: int = 8, time: bool = False):
         self.step = float(step)
+        self.minor = minor
+        self.label_chars = label_chars  # « 48:00:00 » : largeur d'une étiquette de l'axe du temps
+        self.time = time  # axe du temps (minutes) : multiples en durées rondes (20 s, 1 min, 5 min…)
 
     def __call__(self):
         vmin, vmax = self.axis.get_view_interval()
-        return self.tick_values(vmin, vmax)
+        return self.tick_values(vmin, vmax, MAX_TICKS * 5 if self.minor else self._room())
 
-    def tick_values(self, vmin, vmax):
+    def _room(self) -> int:
+        """Nombre d'étiquettes qui tiennent sur l'axe sans se chevaucher."""
+        try:
+            box = self.axis.axes.get_window_extent()
+            # taille des étiquettes sans les créer (get_ticklabels rappellerait ce localisateur)
+            from matplotlib import rcParams
+            from matplotlib.font_manager import FontProperties
+
+            size = self.axis._major_tick_kw.get("labelsize") or rcParams["{}tick.labelsize".format(self.axis.axis_name)]
+            px = self.axis.figure.dpi / 72.0 * FontProperties(size=size).get_size_in_points()
+            if self.axis.axis_name == "x":
+                length, per_label = box.width, px * (0.62 * self.label_chars + 1.5)
+            else:
+                length, per_label = box.height, px * 2.0
+            return max(2, min(MAX_TICKS, int(length / per_label)))
+        except Exception:  # pas encore de figure dessinée
+            return MAX_TICKS
+
+    def tick_values(self, vmin, vmax, limit: int = MAX_TICKS):
         if vmax < vmin:
             vmin, vmax = vmax, vmin
         step = self.step
         count = (vmax - vmin) / step
-        if count > MAX_TICKS:
-            step *= math.ceil(count / MAX_TICKS)
+        if count > limit:
+            need = count / limit
+            nice = [d for d in _NICE_MINUTES if d >= step * need - 1e-9
+                    and abs(d / step - round(d / step)) < 1e-6] if self.time else []
+            step = nice[0] if nice else step * (next((k for k in _NICE_FACTORS if k >= need), None) or math.ceil(need))
         start = math.ceil(vmin / step - 1e-9) * step
         ticks = np.arange(start, vmax + step * 1e-6, step)
         return np.round(np.round(ticks / self.step) * self.step, 12)  # pas de 0,30000000000000004
+
+
+# Multiples « ronds » du pas choisi quand ses étiquettes ne tiennent pas : 1-2-5 pour les valeurs,
+# durées usuelles pour le temps (10 s -> 20 s, 30 s, 1 min, 2 min, 5 min…)
+_NICE_FACTORS = (2, 5, 10, 20, 50, 100, 200, 500, 1000)
+_NICE_MINUTES = tuple(x / 60 for x in (1, 2, 5, 10, 15, 20, 30)) + (1, 2, 5, 10, 15, 20, 30, 60, 120, 180, 360, 720) \
+    + tuple(1440 * d for d in (1, 2, 5, 7, 10, 14, 30, 60, 90, 180, 365))
 
 
 class TimeLocator(Locator):
@@ -526,7 +563,9 @@ class PlotManager:
             ax.set_xlabel(settings.x.label)
         x_step = settings.x_percent_step if self.percent_axis else settings.x.step
         if x_step:
-            ax.xaxis.set_major_locator(StepLocator(x_step))
+            ax.xaxis.set_major_locator(StepLocator(x_step, label_chars=6 if self.percent_axis else 8,
+                                                   time=not self.percent_axis))
+            ax.xaxis.set_minor_locator(StepLocator(x_step, minor=True))
         if settings.x.min is not None or settings.x.max is not None:
             ax.set_xlim(left=settings.x.min, right=settings.x.max)
         for name, a in self.axes.items():
@@ -537,6 +576,7 @@ class PlotManager:
                 a.set_yscale("log")
             elif axis.step:
                 a.yaxis.set_major_locator(StepLocator(axis.step))
+                a.yaxis.set_minor_locator(StepLocator(axis.step, minor=True))
             if axis.label is not None:
                 a.set_ylabel(axis.label)
             if axis.min is not None or axis.max is not None:

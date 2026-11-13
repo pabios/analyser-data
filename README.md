@@ -66,7 +66,7 @@ python main.py
    **corrections de température et d'humidité** de -5,0 à +5,0 (générales ou **par sonde**,
    affichée = mesurée + correction, reprises dans les exports et le journal, mémorisées).
 6. Icône **Modifier les axes et les courbes** (barre d'outils du graphique) : titre, début / fin
-   du temps en H:MM:SS, min / max / titre / échelle log et **graduations** (pas de 30 min,
+   du temps en H:MM:SS, min / max / titre / échelle log et **graduations** (pas de 1 s, 10 s, 1 min, 15 min, 30 min,
    1 h… 1 jour, ou saisi ; mémorisé) de chaque axe, nom, couleur, épaisseur,
    trait et **valeur absolue |x|** de chaque voie, position de la **légende** (toujours hors
    des courbes : droite, haut, bas ; bouton « Légende » pour la masquer). Gardé jusqu'au

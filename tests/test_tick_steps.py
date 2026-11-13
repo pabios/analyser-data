@@ -60,13 +60,15 @@ def test_steps_are_applied_to_every_axis():
     settings.x.step = 5.0  # 5 min
     settings.y_axis(MAIN_AXIS).step = 2.0
     settings.y_axis(TEMPERATURE).step = 0.5
-    fig = Figure()
+    fig = Figure(figsize=(14, 7))  # taille du graphique dans la fenêtre de l'appli
     FigureCanvasAgg(fig)
     plot = PlotManager(fig)
     plot.draw(s.series(keys), settings=settings)
     fig.canvas.draw()
     x = plot.axes[MAIN_AXIS].get_xticks()
     assert np.allclose(np.diff(x), 5.0) and np.allclose(x % 5.0, 0)
+    minor = plot.axes[MAIN_AXIS].xaxis.get_minorticklocs()
+    assert np.allclose(np.minimum(minor % 5.0, 5.0 - minor % 5.0), 0)
     assert np.allclose(np.diff(plot.axes[MAIN_AXIS].get_yticks()), 2.0)
     assert np.allclose(np.diff(plot.axes[TEMPERATURE].get_yticks()), 0.5)
     # « Maison » remet les limites automatiques mais garde les pas
@@ -94,3 +96,56 @@ def test_app_reloads_saved_steps(tmp_path, monkeypatch):
     i18n.set_setting("tick_steps", {"x": 120.0, TEMPERATURE: 5.0})
     settings = app.initial_plot_settings()
     assert settings.x.step == 120.0 and settings.y[TEMPERATURE].step == 5.0
+
+
+@pytest.mark.parametrize("text, seconds", [("1 s", 1), ("5 s", 5), ("10 s", 10), ("30 s", 30), ("1 min", 60),
+                                           ("2 min", 120), ("5 min", 300), ("10 min", 600), ("15 min", 900)])
+def test_short_time_steps_in_list(text, seconds):
+    """Demande du 2026-11-13 (issue #16) : pas plus fins que 30 min, dans la liste."""
+    from analyser_data.plotting import TIME_TICK_STEPS
+
+    assert text in TIME_TICK_STEPS.values()
+    value = parse_tick_step(text, time_axis=True)
+    assert value * 60 == pytest.approx(seconds)
+    assert format_tick_step(value, time_axis=True) == text  # mémorisé puis réaffiché tel quel
+
+
+@pytest.mark.parametrize("text", ["0,5 s", "0:00:00", "0,001"])
+def test_time_step_below_one_second_refused(text):
+    with pytest.raises(ValueError):
+        parse_tick_step(text, time_axis=True)
+
+
+def test_ten_second_ticks_on_a_short_test():
+    """Essai de 9 min : graduations toutes les 10 s, étiquettes H:MM:SS distinctes."""
+    from analyser_data.plotting import format_axis_time
+
+    ticks = StepLocator(10 / 60).tick_values(0, 9.37)
+    assert len(ticks) == 57 and ticks[1] * 60 == pytest.approx(10)
+    labels = [format_axis_time(t) for t in ticks]
+    assert labels[:3] == ["0:00:00", "0:00:10", "0:00:20"] and len(set(labels)) == len(labels)
+
+
+def test_labels_never_overlap_but_the_chosen_step_stays_visible():
+    """10 s sur un essai de 9 min dans un petit graphique : étiquettes à un multiple rond de
+    10 s (lisibles), petites graduations toutes les 10 s."""
+    from analyser_data.channels import VOLTAGE
+    from analyser_data.plotting import PlotSeries
+
+    x = np.arange(0, 9.37, 0.1 / 60)
+    fig = Figure(figsize=(8, 4))
+    FigureCanvasAgg(fig)
+    plot = PlotManager(fig)
+    settings = PlotSettings()
+    settings.x.step = 10 / 60
+    plot.draw([PlotSeries(gid="0", label="U", x=x, y=np.sin(x), unit="V", quantity=VOLTAGE, key=("f", "U"))],
+              settings=settings)
+    fig.canvas.draw()
+    ax = plot.axes[MAIN_AXIS]
+    major = ax.get_xticks()
+    step_s = np.diff(major)[0] * 60
+    assert len(major) <= 15 and step_s in (20, 30, 60, 120, 300)
+    every = np.union1d(np.round(major, 9), np.round(ax.xaxis.get_minorticklocs(), 9))
+    assert np.allclose(np.diff(every) * 60, 10)  # grille complète toutes les 10 s
+    boxes = [t.get_window_extent() for t in ax.get_xticklabels() if t.get_text()]
+    assert all(a.x1 <= b.x0 for a, b in zip(boxes, boxes[1:]))  # aucune étiquette ne se chevauche

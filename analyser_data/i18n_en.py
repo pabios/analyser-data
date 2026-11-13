@@ -511,7 +511,8 @@ EN = {
     "Graduations tous les": "Ticks every",
     "Automatique": "Automatic",
     "1 jour": "1 day",
-    "Pas de graduation invalide : « {} » (ex. 30 min, 1 h, 1:30:00, 1 jour).": "Invalid tick interval: “{}” (e.g. 30 min, 1 h, 1:30:00, 1 day).",
+    "Pas de graduation invalide : « {} » (ex. 10 s, 5 min, 1 h, 1:30:00, 1 jour).": "Invalid tick interval: “{}” (e.g. 10 s, 5 min, 1 h, 1:30:00, 1 day).",
+    "Pas de graduation trop petit : « {} » (1 s au minimum).": "Tick interval too small: “{}” (1 s minimum).",
     "Pas de graduation invalide : « {} » (ex. 5 ou 0,5).": "Invalid tick interval: “{}” (e.g. 5 or 0.5).",
     # Spectre FFT (issue #16)
     "FFT…": "FFT…",
