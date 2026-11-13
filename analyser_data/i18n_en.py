@@ -326,6 +326,7 @@ EN = {
     'Courant': 'Current',
     'Température': 'Temperature',
     'Humidité': 'Humidity',
+    'Pression': 'Pressure',
     'Température ambiante': 'Ambient temperature',
     'Température ambiante {}': 'Ambient temperature {}',
     'VALEUR ABSOLUE': 'ABSOLUTE VALUE',

@@ -25,6 +25,7 @@ exemples/enceinte/  (issue #16 : fichiers d'enceinte climatique, température ET
       2 sondes de température (°C) et 2 sondes d'humidité (%HR), descriptif de voie dans l'en-tête.
       Deux sondes de chaque grandeur : de quoi essayer « Moyenne… » et « FFT… ».
 * nanodac_T_HR.xlsx             Le même fichier enregistré sous Excel (date/heure en vraies dates).
+* nanodac_T_P.txt               Essai en pression (2 h, 10 s) : température °C et pression mbar.
 * enceinte_T_HR.xlsx            Export d'enceinte sous Excel : « Date » et « Heure » dans deux
       colonnes, consigne et mesure de température et d'humidité.
 
@@ -296,6 +297,22 @@ def climatic():
     book.save(CLIM / "enceinte_T_HR.xlsx")
 
 
+def pressure():
+    """Essai en pression (issue #18) au format nanodac : 2 h à 10 s, dépression 1013 -> 300 mbar
+    (palier 1 h) puis retour, température qui baisse pendant la détente."""
+    r = np.random.default_rng(18)  # générateur à part : les autres exemples ne changent pas
+    t = np.arange(0, 2 * 3600, 10.0)
+    h = t / 3600.0
+    p = np.interp(h, [0, 0.25, 1.25, 1.5, 2], [1013, 300, 300, 1013, 1013]) + r.normal(0, 0.8, len(t))
+    temp = 23 - 4 * np.interp(h, [0, 0.25, 0.75, 1.25, 1.5, 2], [0, 1, 0.3, 0.3, 0, 0]) + r.normal(0, 0.05, len(t))
+    stamps = CLIM_START + pd.to_timedelta(t, unit="s")
+    heads = ["Channel 1       (ENAN1);Group 1;M401-T120;°C", "Channel 5       (ENAN5);Group 1;M405-P130;mbar"]
+    lines = ["Date/Heure\t" + "\t".join(heads)]
+    for k, ts in enumerate(stamps):
+        lines.append(ts.strftime("%d/%m/%y %H:%M:%S") + "\t{:.2f}\t{:.1f}".format(temp[k], p[k]).replace(".", ","))
+    (CLIM / "nanodac_T_P.txt").write_bytes(("\r\n".join(lines) + "\r\n").encode("cp1252"))
+
+
 def gbd():
     """GL860 .GBD (en-tête Shift-JIS de 8192 octets + enregistrements big-endian) et son export CSV."""
     r = np.random.default_rng(1617)
@@ -342,5 +359,6 @@ if __name__ == "__main__":
     nanodac()
     gl860()
     climatic()
+    pressure()
     gbd()
     print("Fichiers d'exemple générés dans", OUT)

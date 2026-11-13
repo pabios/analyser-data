@@ -39,6 +39,21 @@ _UNIT_ALIASES = {
     "w": "W",
     "ohm": "Ω",
     "ω": "Ω",
+    # pression (issue #18) : écritures des centrales (« MBAR », « Kpa », « psia »…)
+    "pa": "Pa",
+    "hpa": "hPa",
+    "kpa": "kPa",
+    "mpa": "MPa",
+    "mbar": "mbar",
+    "bar": "bar",
+    "bara": "bar",
+    "barg": "bar",
+    "bar(g)": "bar",
+    "psi": "psi",
+    "psia": "psi",
+    "psig": "psi",
+    "mmhg": "mmHg",
+    "torr": "Torr",
 }
 
 _TEMP_RE = re.compile(r"temp|°c", re.IGNORECASE)
@@ -49,6 +64,7 @@ VOLTAGE = "tension"
 CURRENT = "courant"
 TEMPERATURE = "température"
 HUMIDITY = "humidité"
+PRESSURE = "pression"
 OTHER = "autre"
 
 _QUANTITY_BY_UNIT = {
@@ -60,6 +76,7 @@ _QUANTITY_BY_UNIT = {
     "µA": CURRENT,
     "°C": TEMPERATURE,
     "%HR": HUMIDITY,
+    **{u: PRESSURE for u in ("Pa", "hPa", "kPa", "MPa", "mbar", "bar", "psi", "mmHg", "Torr")},
 }
 
 # Unité par défaut des voies "CHx" sans unité d'un Graphtec (jamais supposée ailleurs :
@@ -120,10 +137,12 @@ _QUANTITY_BY_NAME = [
     (HUMIDITY, _HUM_RE),
     (VOLTAGE, re.compile(r"volt|tension|^u(_|\b|\d)", re.IGNORECASE)),
     (CURRENT, re.compile(r"courant|amp[eè]re|current|^i(_|\b|\d)", re.IGNORECASE)),
+    (PRESSURE, re.compile(r"press|druck", re.IGNORECASE)),
 ]
 
 # Nom affiché de chaque grandeur (axes du graphique) ; traduit à l'affichage
-QUANTITY_NAMES = {VOLTAGE: "Tension", CURRENT: "Courant", TEMPERATURE: "Température", HUMIDITY: "Humidité"}
+QUANTITY_NAMES = {VOLTAGE: "Tension", CURRENT: "Courant", TEMPERATURE: "Température", HUMIDITY: "Humidité",
+                  PRESSURE: "Pression"}
 
 
 def quantity_of(unit: str, *names: str) -> str:

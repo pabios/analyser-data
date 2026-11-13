@@ -540,6 +540,33 @@ def main():
     pump(root)
     assert any("Unité du temps imposée" in text for _t, text in gui.session.journal)
     print("unité du temps (SEFRAM ms) : OK")
+
+    # Issue #18 : fichier nanodac pression + température -> voie mbar reconnue, axe titré
+    press_file = ROOT / "exemples" / "enceinte" / "nanodac_T_P.txt"
+    gui.open_files([str(press_file)], preview=True)
+    dialog = next(w for w in root.winfo_children() if isinstance(w, ImportDialog))
+    end = time.time() + 60
+    while str(press_file) not in dialog.results and time.time() < end:
+        root.update()
+        time.sleep(0.05)
+    pump(root)
+    pm = dialog.results[str(press_file)]
+    assert [ch.unit for ch in pm.channels] == ["°C", "mbar"], pm
+    shot_window(dialog, "40_import_pression.png")
+    dialog.accept()
+    pump(root)
+    for k in gui._checked:
+        gui._checked[k] = k[0] == pm.name
+    gui._refresh_checkmarks()
+    gui._rebuild_tree()
+    gui.redraw()
+    pump(root)
+    labels = [a.get_ylabel() for a in gui.figure.axes]
+    assert "Pression (mbar)" in labels and "Température (°C)" in labels, labels
+    texts = [t.get_text() for t in gui.figure.legends[0].get_texts()]
+    assert "Channel 5 – M405-P130 (mbar)" in texts, texts
+    shot(root, "41_pression_temperature.png")
+    print("pression + température : OK")
     print("enceinte Excel + moyennes °C / %HR : OK")
 
     help_window = app_module.HelpWindow.open(root, "Nettoyage")

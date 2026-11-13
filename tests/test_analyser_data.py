@@ -261,7 +261,7 @@ def test_invalid_files(tmp_path, content, message):
         ("Courant (mA)", "Courant (mA)", CURRENT),
         ("Température", "Température (°C)", TEMPERATURE),
         ("HR (%)", "HR (%HR)", HUMIDITY),
-        ('"Pression"', "Pression", "autre"),
+        ('"Pression"', "Pression", "pression"),  # issue #18 : grandeur reconnue
     ],
 )
 def test_channel_labels(raw, label, quantity):

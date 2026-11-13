@@ -24,7 +24,8 @@ SECTIONS = [
    des secondes. Vérifiez la « Durée » affichée ; si elle est fausse, choisissez l'« Unité du
    temps » (millisecondes, secondes, minutes) dans la fenêtre « Import ». Le choix est noté
    dans le journal ; les mesures ne changent pas.
-   Fichiers pour essayer : dossier exemples (exemples/enceinte : enceinte climatique °C et
+   Fichiers pour essayer : dossier exemples (exemples/enceinte : essai en pression °C et
+   mbar nanodac_T_P.txt ; enceinte climatique °C et
    %HR en texte et en Excel ; exemples/autres_formats/GL860_test.GBD et son export CSV).
 2. Cochez les voies à afficher. Cliquer sur un nom de fichier coche / décoche toutes
    ses voies. Chaque voie s'affiche sous le nom de la centrale : « Channel 4 ».
@@ -44,7 +45,8 @@ SECTIONS = [
    assumed. Check the “Duration” shown; if it is wrong, choose the “Time unit”
    (milliseconds, seconds, minutes) in the “Import” window. The choice is written in the
    log; the measurements do not change.
-   Files to try: the exemples folder (exemples/enceinte: climatic chamber °C and %RH as
+   Files to try: the exemples folder (exemples/enceinte: pressure test °C and mbar
+   nanodac_T_P.txt; climatic chamber °C and %RH as
    text and Excel; exemples/autres_formats/GL860_test.GBD and its CSV export).
 2. Tick the channels to display. Clicking a file name ticks / unticks all its
    channels. Each channel is shown with the data logger name: “Channel 4”.
@@ -207,7 +209,9 @@ gauche de la disquette) :
 Par défaut, la légende affiche « Channel 1 (V) » et la température « Température
 ambiante » (numérotée s'il y en a plusieurs) ; les voies d'un fichier d'enceinte
 climatique gardent leur vrai nom (« Channel 2 – M402-M210 (°C) ») ; le titre de l'axe Y regroupe les
-grandeurs tracées (« Tension (V) / Courant (mA) »). Un titre effacé revient au défaut.
+grandeurs tracées (« Tension (V) / Courant (mA) »). Grandeurs reconnues : tension, courant,
+température, humidité et pression (Pa, hPa, kPa, MPa, mbar, bar, psi, mmHg, Torr ; la pression
+est sur l'axe de gauche). Un titre effacé revient au défaut.
 Les réglages restent quand vous cochez d'autres voies ou nettoyez, et sont repris dans
 l'image et le rapport PDF. La légende est toujours hors des courbes : à droite par
 défaut (plusieurs colonnes s'il y a beaucoup de voies), en haut ou en bas (liste
@@ -231,7 +235,9 @@ libellés et couleurs gardés) ; « Tout remettre par défaut » efface tout."""
 By default, the legend shows “Channel 1 (V)” and the temperature “Ambient temperature”
 (numbered if there are several); channels of a climatic chamber file keep their real name
 (“Channel 2 – M402-M210 (°C)”); the Y axis title groups the plotted quantities
-(“Voltage (V) / Current (mA)”). A cleared title returns to the default.
+(“Voltage (V) / Current (mA)”). Quantities recognised: voltage, current, temperature,
+humidity and pressure (Pa, hPa, kPa, MPa, mbar, bar, psi, mmHg, Torr; pressure is on the
+left axis). A cleared title returns to the default.
 Settings are kept when you tick other channels or clean, and are used in the image and
 the PDF report. The legend is always outside the curves: on the right by default (several
 columns when there are many channels), at the top or bottom (“Legend” list of the Axes

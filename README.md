@@ -115,7 +115,8 @@ Prévu pour les enregistreurs **Graphtec GL980 / GL860** (export CSV avec bloc
 **Eurotherm nanodac** (date en texte ou en nombre Excel, unité dans le descriptif de voie).
 Des maquettes calquées sur de vrais exports sont fournies dans `exemples/` :
 - `exemples/enceinte/` : essai climatique de 24 h (2 sondes °C, 2 sondes %HR) au format nanodac
-  (`.txt` et `.xlsx`) et export d'enceinte sous Excel avec « Date » et « Heure » séparées ;
+  (`.txt` et `.xlsx`), export d'enceinte sous Excel avec « Date » et « Heure » séparées, et essai
+  en pression (`nanodac_T_P.txt` : °C et mbar) ;
 - `exemples/autres_formats/GL860_test.GBD` et `GL860_test_export.CSV` : les mêmes mesures en
   fichier natif Graphtec et en CSV (elles doivent donner les mêmes courbes). Ce `.GBD` est écrit
   d'après la spécification Graphtec : seul un `.GBD` enregistré par l'appareil valide vraiment
@@ -127,7 +128,8 @@ indicateur de chargement.
 Les fichiers bruts de l'appareil s'ouvrent directement, sans passer par Excel : séparateur
 `,` `;`, tabulation, `|` ou espaces et décimale `.` ou `,` dans toutes les combinaisons (y compris
 `,` + `,`), avec ou sans guillemets, utf-8 / cp1252 / utf-16, fichiers réenregistrés par Excel.
-Temps en date/heure, `H:MM:SS`, ms, s ou min. Tout est détecté automatiquement ; un temps en
+Grandeurs reconnues : tension, courant, température, humidité et **pression** (Pa, hPa, kPa,
+MPa, mbar, bar, psi, mmHg, Torr). Temps en date/heure, `H:MM:SS`, ms, s ou min. Tout est détecté automatiquement ; un temps en
 nombres sans unité écrite est lu en secondes, sauf si une autre unité est choisie dans la fenêtre
 **Import**.
 
