@@ -1,4 +1,7 @@
 """Issue #16 : fichiers natifs Graphtec .GBD (en-tête texte Shift-JIS + données binaires big-endian)."""
+import re
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -62,3 +65,71 @@ def test_truncated_gbd_is_reported(tmp_path):
     make_gbd(path, n=300, counts=1000)
     m = load_measurement(path)
     assert len(m.data) == 300 and any("incomplet" in w for w in m.warnings)
+
+
+# --- Mise à l'échelle de l'appareil (« Scaling », $Measure / $$Scale) : en-tête réel du client ---
+
+CLIENT_HEADER = Path(__file__).resolve().parent / "fixtures" / "gl980_issue16_header.txt"
+
+
+def make_client_gbd(path, n=200, scale_overrides=None):
+    """GL980 du client (issue #16) : CH1 et CH2 en A par mise à l'échelle (shunts), CH6 en V.
+    En-tête copié tel quel de son « Extrait anonymisé » ; seules les mesures sont inventées."""
+    text = CLIENT_HEADER.read_text(encoding="utf-8")
+    text = re.sub(r"Counts\s*=\s*\d+", "Counts      = {}".format(n), text)
+    for old, new in (scale_overrides or {}).items():
+        text = text.replace(old, new)
+    header = text.replace("\n", "\r\n").encode("shift_jis")
+    header += b"\x00" * (8192 - len(header))
+    k = np.arange(n)
+    dtype = np.dtype([("CH1", ">i2"), ("CH2", ">i2"), ("CH6", ">i2"), ("Alarm", ">u2"), ("AlarmOut", ">u2")])
+    assert dtype.itemsize == 10  # OneDataSize = 10
+    records = np.zeros(n, dtype=dtype)
+    records["CH1"] = 10000 + (k % 50) * 100  # 50 mV et plus, gamme 100 mV
+    records["CH2"] = 5000 - (k % 20) * 10  # 25 mV et moins
+    records["CH6"] = 2400 + (k % 10)  # ≈ 12 V, gamme 100 V
+    path.write_bytes(header + records.tobytes())
+    return records
+
+
+def test_client_gl980_scaled_channels_are_in_amperes(tmp_path):
+    path = tmp_path / "essai.GBD"
+    records = make_client_gbd(path)
+    m = load_measurement(path)
+    assert [c.label for c in m.channels] == ["Channel 1", "Channel 2", "Channel 6"]
+    assert [c.unit for c in m.channels] == ["A", "A", "V"]
+    # CH1 : 0–20 000 points (0–100 mV) -> 0–100,00 A ; CH2 : 0–10 000 points (0–50 mV) -> 0–20,00 A
+    np.testing.assert_allclose(m.data["Channel 1"].to_numpy(), records["CH1"] / 200.0)
+    np.testing.assert_allclose(m.data["Channel 2"].to_numpy(), records["CH2"] / 500.0)
+    np.testing.assert_allclose(m.data["Channel 6"].to_numpy(), records["CH6"].astype(float) * 100 / 20000.0)
+    assert m.data["Channel 1"].iloc[0] == pytest.approx(50.0)
+    assert m.data["Channel 2"].iloc[0] == pytest.approx(10.0)
+    assert m.data["Channel 6"].iloc[0] == pytest.approx(12.0)
+    assert m.period_s == pytest.approx(0.1)
+    assert m.start == pd.Timestamp("2026-11-09 16:48:09")
+    notes = [w for w in m.warnings if "mise à l'échelle" in w]
+    assert notes == ["CH1 : mise à l'échelle de l'appareil appliquée (0 à 100 mV -> 0 à 100 A).",
+                     "CH2 : mise à l'échelle de l'appareil appliquée (0 à 50 mV -> 0 à 20 A)."]
+
+
+def test_scaling_with_offset_4_20_mA(tmp_path):
+    """Mise à l'échelle avec décalage (1–5 V -> 4–20 mA, comme CH4 du client) appliquée à CH6."""
+    path = tmp_path / "essai.GBD"
+    records = make_client_gbd(path, scale_overrides={
+        'CH6         = Off,    +200,   +1000,    +400,   +2000,  +2, "mA"':
+        'CH6         = On ,    +200,   +1000,    +400,   +2000,  +2, "mA"'})
+    m = load_measurement(path)
+    assert m.channels[2].unit == "mA"
+    # 100 V / 20 000 points : 200 points = 1 V -> 4 mA, 1 000 points = 5 V -> 20 mA
+    expected = (400 + (records["CH6"].astype(float) - 200) * 1600 / 800) / 100
+    np.testing.assert_allclose(m.data["Channel 6"].to_numpy(), expected)
+
+
+def test_scaling_off_keeps_volts_and_calculation_is_reported(tmp_path):
+    path = tmp_path / "essai.GBD"
+    make_client_gbd(path, scale_overrides={
+        'CH1         = On ,      +0,  +20000': 'CH1         = Off,      +0,  +20000',
+        'CH2         = Off, CH2  , ADD': 'CH2         = On , CH2  , ADD'})
+    m = load_measurement(path)
+    assert [c.unit for c in m.channels] == ["mV", "A", "V"]
+    assert any("CH2 : calcul entre voies" in w for w in m.warnings)

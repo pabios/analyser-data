@@ -470,6 +470,8 @@ EN = {
     # Fichiers Graphtec .GBD (issue #16)
     'fichier natif Graphtec .GBD': 'native Graphtec .GBD file',
     'Décodage du fichier Graphtec {}…': 'Decoding the Graphtec file {}…',
+    "{} : mise à l'échelle de l'appareil appliquée ({} à {} {} -> {} à {} {}).": "{}: device scaling applied ({} to {} {} -> {} to {} {}).",
+    "{} : calcul entre voies réglé sur l'appareil, non appliqué.": "{}: inter-channel calculation set on the device, not applied.",
     "Lu directement depuis le fichier natif Graphtec .GBD (lecture à vérifier une première fois avec l'export CSV de l'appareil).": "Read directly from the native Graphtec .GBD file (check once against the device's CSV export).",
     "« {} » n'est pas un fichier GBD Graphtec lisible (taille d'en-tête introuvable).": '“{}” is not a readable Graphtec GBD file (header size not found).',
     'Colonne « {} » inconnue dans le fichier GBD.': 'Unknown column “{}” in the GBD file.',

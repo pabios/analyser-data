@@ -40,7 +40,8 @@ python main.py
 ## Utilisation
 
 1. **Ouvrir des fichiers…** : CSV, TXT, DAT, TSV, classeur **Excel** (XLSX, XLS), JSON, Parquet ou
-   fichier natif **Graphtec .GBD**. La fenêtre
+   fichier natif **Graphtec .GBD** (la **mise à l'échelle** réglée sur l'appareil, ex. shunt
+   100 mV -> 100 A, est appliquée comme sur l'écran du GL et signalée voie par voie). La fenêtre
    **Import** montre comment chaque fichier est lu (temps, voies, premières lignes) ; on y
    choisit la feuille d'un classeur, on impose le séparateur, ou l'**unité du temps** quand la
    colonne temps est en nombres sans unité (ex. export CSV **SEFRAM DAS1400** en ms : par défaut

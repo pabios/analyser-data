@@ -12,6 +12,12 @@ libres : gist astropenguin « gbd2csv », paquet R whatalnk/readgbd) :
   ``Status`` sur 16 bits non signés.
 * **Conversion** : voie en tension DC -> valeur = brut × gamme / 20 000 (ex. gamme 20 V : ±20 000
   points = ±20 V) ; voie de température -> brut / 10 °C ; ±32 767 = hors échelle.
+* **Mise à l'échelle de l'appareil** (« Scaling », section ``$Measure`` / ``$$Scale``, une ligne par
+  voie : ``On|Off, entrée basse, entrée haute, sortie basse, sortie haute, décimales, "unité"``) :
+  les points d'entrée sont en points bruts (même échelle que les données), les points de sortie
+  en unité affichée × 10^décimales. Ex. vu sur un GL980 (issue #16) : gamme 100 mV,
+  ``On, 0, 20000, 0, 10000, 2, "A"`` -> 0–100 mV donne 0–100,00 A. Appliquée comme sur l'écran de
+  l'appareil et dans son export CSV, et signalée dans les avertissements.
 
 Les fichiers sont ensuite traités comme un export CSV (mêmes voies « Channel N », même temps).
 Lecture marquée « à vérifier » tant qu'elle n'a pas été comparée à l'export CSV de l'appareil.
@@ -148,8 +154,9 @@ def _channel_scale(amp: Optional[str], temp_unit: str) -> Tuple[float, str]:
 
     Renvoie (facteur, unité) avec valeur = brut × facteur."""
     fields = _split(amp)
-    kind = fields[0].upper() if fields else ""
-    if kind.startswith("TEMP") or kind in ("TC", "PT", "RTD"):
+    # GL220/GL820 : « DC, 20V, … » ; GL980 : « M, DC, 100mV, … » (type d'entrée en 2e position)
+    kinds = [f.upper() for f in fields[:2]]
+    if any(k.startswith("TEMP") or k in ("TC", "PT", "RTD") for k in kinds):
         return 0.1, temp_unit or "°C"
     for field in fields:
         match = _RANGE_RE.match(field)
@@ -158,6 +165,26 @@ def _channel_scale(amp: Optional[str], temp_unit: str) -> Tuple[float, str]:
             unit = {"mv": "mV", "v": "V", "kv": "kV"}[unit.lower()]
             return value / 20000.0, unit
     return 1.0, ""
+
+
+def _device_scaling(line: Optional[str]) -> Optional[Tuple[float, float, float, float, int, str]]:
+    """Ligne $$Scale d'une voie -> (entrée basse, entrée haute, sortie basse, sortie haute,
+    décimales, unité) si la mise à l'échelle est active, sinon None."""
+    fields = _split(line)
+    if len(fields) < 7 or fields[0].lower() != "on":
+        return None
+    try:
+        in_lo, in_hi, out_lo, out_hi = (float(f) for f in fields[1:5])
+        decimals = int(float(fields[5]))
+    except ValueError:
+        return None
+    if in_hi == in_lo:
+        return None
+    return in_lo, in_hi, out_lo, out_hi, decimals, fields[6].strip()
+
+
+def _fmt(value: float) -> str:
+    return "{:g}".format(value).replace(".", ",")
 
 
 def read_gbd(path) -> Tuple[pd.DataFrame, Dict]:
@@ -181,13 +208,28 @@ def read_gbd(path) -> Tuple[pd.DataFrame, Dict]:
 
     temp_unit = (_find(tree, "common", "data", "tempunit") or "°C").replace("ﾟ", "°")
     amp = tree.get("amp", {})
+    measure = tree.get("measure", {}) if isinstance(tree.get("measure"), dict) else {}
+    scale = measure.get("scale", {}) if isinstance(measure.get("scale"), dict) else {}
+    calculation = measure.get("calculation", {}) if isinstance(measure.get("calculation"), dict) else {}
     columns, units, notes = {}, [], []
     for name in order:
         if not name.upper().startswith("CH"):
             continue  # alarmes, logique, impulsions : pas des voies analogiques
         raw = records[name].astype(float)
         factor, unit = _channel_scale(amp.get(name.lower()) if isinstance(amp, dict) else None, temp_unit)
-        values = raw * factor
+        scaling = _device_scaling(scale.get(name.lower()))
+        if scaling:
+            in_lo, in_hi, out_lo, out_hi, decimals, scaled_unit = scaling
+            div = 10.0 ** decimals
+            values = (out_lo + (raw - in_lo) * (out_hi - out_lo) / (in_hi - in_lo)) / div
+            notes.append(_("{} : mise à l'échelle de l'appareil appliquée ({} à {} {} -> {} à {} {}).").format(
+                name, _fmt(in_lo * factor), _fmt(in_hi * factor), unit, _fmt(out_lo / div), _fmt(out_hi / div),
+                scaled_unit))
+            unit = scaled_unit
+        else:
+            values = raw * factor
+        if _split(calculation.get(name.lower()))[0].lower() == "on":
+            notes.append(_("{} : calcul entre voies réglé sur l'appareil, non appliqué.").format(name))
         values[np.abs(raw) >= OVER_RANGE] = np.nan
         columns[name] = values
         units.append(unit)

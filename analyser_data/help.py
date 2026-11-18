@@ -13,7 +13,9 @@ SECTIONS = [
     ("Démarrer", "Démarrer", """\
 1. « Ouvrir des fichiers… » : choisissez un ou plusieurs exports (Graphtec, nanodac…) en
    texte (CSV, TXT, DAT, TSV), en classeur Excel (XLSX, XLS), en JSON, en Parquet, ou le
-   fichier natif Graphtec .GBD (lecture à vérifier une fois avec l'export CSV).
+   fichier natif Graphtec .GBD (lecture à vérifier une fois avec l'export CSV). Dans un .GBD,
+   la mise à l'échelle réglée sur l'appareil (ex. shunt 100 mV -> 100 A) est appliquée comme
+   à l'écran du GL : unité et valeurs ; elle est indiquée voie par voie dans la fenêtre Import.
    Séparateurs reconnus : « ; », « , », tabulation, « | » et espaces. La fenêtre « Import » montre
    comment chaque fichier est lu (colonne temps, voies, premières lignes) : choisissez la
    feuille d'un classeur, ou imposez le séparateur si la détection s'est trompée, puis
@@ -35,7 +37,9 @@ SECTIONS = [
      "Getting started", """\
 1. “Open files…”: choose one or more exports (Graphtec, nanodac…) as text (CSV, TXT,
    DAT, TSV), Excel workbooks (XLSX, XLS), JSON, Parquet, or the native Graphtec .GBD file
-   (check it once against the CSV export). Separators recognised: “;”,
+   (check it once against the CSV export). In a .GBD, the scaling set on the device (e.g.
+   100 mV shunt -> 100 A) is applied as on the GL screen: unit and values; it is listed
+   channel by channel in the Import window. Separators recognised: “;”,
    “,”, tab, “|” and spaces. The “Import” window shows how each file is read
    (time column, channels, first rows): choose a workbook's sheet, or force the
    separator if detection went wrong, then “Import”. Prefer the device's original file

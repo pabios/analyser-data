@@ -1,0 +1,233 @@
+$Common
+  ID          = 1209181A
+  Volume      = 1, 1
+  HeaderSiz   =  8192
+  Vendor      = "GRAPHTEC Corporation"
+  Model       = "GL980"
+  Suffix      = "STD   "
+  CH          = 8CH
+  Option      = None
+  Format      = "Ver1.00"
+  Hardware    = "Ver1.00"
+  Firmware    = "Ver1.42  ","Rev0002"
+  OS          = "Ver4.00", "Ver3.30"
+  Software    = "       "
+$$Data
+  Format      = BinaryData
+  Type        = BigEndian, Short, Setup
+  Order       = CH1, CH2, CH6, Alarm, AlarmOut
+  OneDataSize = 10
+  Sample      = 100ms
+  PulseSample = 1s   
+  TempUnit    = C
+  LogicCH     = 4
+  Counts      =    2308422
+  Trigger     =          0
+$$Time
+  Start       = 2026-11-09,16:48:09
+  Stop        = 2026-11-12,08:55:31
+  Trigger     = 2026-11-09,16:48:09
+$Amp
+  CH1         = M    , DC  ,  100mV, Off   ,   TC_K,      +0, 28,  5,  6, 0
+  CH2         = M    , DC  ,  100mV, Off   ,   TC_K,      +0,  0, 13, 23, 0
+  CH3         = M    , Off ,   500 , Off   ,   TC_K,      +0,  9, 22,  8, 0
+  CH4         = M    , Off ,     5 , Off   ,   TC_K,      +0, 21,  0, 21, 0
+  CH5         = M    , Off ,     5 , Off   ,   TC_K,      +0, 28, 16,  2, 0
+  CH6         = M    , DC  ,   100V, Off   ,   TC_K,      +0,  5, 23, 30, 0
+  CH7         = M    , Off ,     5 , Off   ,   TC_K,      +0, 30, 23,  1, 0
+  CH8         = M    , Off ,     5 , Off   ,   TC_K,      +0, 28,  0, 17, 0
+$LogiPul
+  Function    = Off
+$Pulse
+  Pulse1      =    OFF,  H,  Off,    360, 28,  5,  6,  0
+  Pulse2      =    OFF,  H,  Off,    360,  0, 13, 23,  0
+  Pulse3      =    OFF,  H,  Off,    360,  9, 22,  8,  0
+  Pulse4      =    OFF,  H,  Off,    360, 21,  0, 21,  0
+$Logic
+  Logic1      = Off, 28,  5,  6
+  Logic2      = Off,  0, 13, 23
+  Logic3      = Off,  9, 22,  8
+  Logic4      = Off, 21,  0, 21
+$Measure
+$$Span
+  CH1         =  -5000,  +5000,     +0,   +500
+  CH2         =  -2000,  +2000,     +0,  +5000
+  CH3         = -10000, +10000,     +0, +10000
+  CH4         = -10000, +10000,  -2000, +20000
+  CH5         = -10000, +10000,  -2000, +20000
+  CH6         =  -5000,  +5000,  -2000, +20000
+  CH7         = -10000, +10000,  -2000, +20000
+  CH8         = -10000, +10000,  -2000, +20000
+$$$Pulse
+  Pulse1      =       0,  500000
+  Pulse2      =       0,  500000
+  Pulse3      =       0,  500000
+  Pulse4      =       0,  500000
+$$Scale
+  CH1         = On ,      +0,  +20000,      +0,  +10000,  +2, "A"
+  CH2         = On ,      +0,  +10000,      +0,   +2000,  +2, "A"
+  CH3         = Off,  -20000,  +20000,  -20000,  +20000,  +2, "mV"
+  CH4         = On ,   +4000,  +20000,    +400,   +2000,  +2, "mA"
+  CH5         = On ,   +4000,  +20000,    +400,   +2000,  +2, "mA"
+  CH6         = Off,    +200,   +1000,    +400,   +2000,  +2, "mA"
+  CH7         = On ,   +4000,  +20000,    +400,   +2000,  +2, "mA"
+  CH8         = On ,   +4000,  +20000,    +400,   +2000,  +2, "mA"
+$$$Pulse
+  Pulse1      = Off,     +1,     +1,     +1,     +1, "C"
+  Pulse2      = Off,     +1,     +1,     +1,     +1, "C"
+  Pulse3      = Off,     +1,     +1,     +1,     +1, "C"
+  Pulse4      = Off,     +1,     +1,     +1,     +1, "C"
+$$Calculation
+  CH1         = Off, CH1  , ADD , CH1  , M1      ,  -10000,  +10000,  +0, "V       "
+  CH2         = Off, CH2  , ADD , CH2  , M1      ,  -10000,  +10000,  +0, "V       "
+  CH3         = Off, CH3  , ADD , CH3  , M1      ,  -10000,  +10000,  +0, "V       "
+  CH4         = Off, CH4  , ADD , CH4  , M1      ,  -10000,  +10000,  +0, "V       "
+  CH5         = Off, CH5  , ADD , CH5  , M1      ,  -10000,  +10000,  +0, "V       "
+  CH6         = Off, CH6  , ADD , CH6  , M1      ,  -10000,  +10000,  +0, "V       "
+  CH7         = Off, CH7  , ADD , CH7  , M1      ,  -10000,  +10000,  +0, "V       "
+  CH8         = Off, CH8  , ADD , CH8  , M1      ,  -10000,  +10000,  +0, "V       "
+$Alarm
+  CH1         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000, 1
+  CH2         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000, 1
+  CH3         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000, 1
+  CH4         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000, 1
+  CH5         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000, 1
+  CH6         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000, 1
+  CH7         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000, 1
+  CH8         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000, 1
+$$Pulse
+  Pulse1      = Off, 0, 0, 100, 1
+  Pulse2      = Off, 0, 0, 100, 1
+  Pulse3      = Off, 0, 0, 100, 1
+  Pulse4      = Off, 0, 0, 100, 1
+$$Logic
+  Logic1      = X, 1
+  Logic2      = X, 1
+  Logic3      = X, 1
+  Logic4      = X, 1
+$$Condition
+  KeepAlarm   = On
+$Trigger
+  Repeat      = Off
+  RepeatMode  = START-START
+  RepeatTime  = "00:00:00"
+  PretTrigger = 1000
+$$Start
+  Source      = Off
+  Combination = LevelOR
+  CH1         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH2         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH3         = H     , +2000,  +0, +5000,   +0,   +0, +1000
+  CH4         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH5         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH6         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH7         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH8         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+$$$Pulse
+  Pulse1      = Off   , 0     , 0     , 100   
+  Pulse2      = Off   , 0     , 0     , 100   
+  Pulse3      = Off   , 0     , 0     , 100   
+  Pulse4      = Off   , 0     , 0     , 100   
+$$$Logic
+  Logic1      = X
+  Logic2      = X
+  Logic3      = X
+  Logic4      = X
+$$$Condition
+  TimeRange   = Absolute
+  AbsTime     = "1980-01-01 00:00:00"
+  RelTime     = "2000-01-01 00:00:01"
+  RecTime     =    0hr00min01sec
+  WeeklyFlag  =   0
+  WeeklyTime  = "00:00:00"
+  Alarm       = 1
+$$Stop
+  Source      = Off
+  Combination = LevelOR
+  CH1         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH2         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH3         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH4         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH5         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH6         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH7         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+  CH8         = Off   ,  +0,  +0, +5000,   +0,   +0, +1000
+$$$Pulse
+  Pulse1      = Off   , 0     , 0     , 100   
+  Pulse2      = Off   , 0     , 0     , 100   
+  Pulse3      = Off   , 0     , 0     , 100   
+  Pulse4      = Off   , 0     , 0     , 100   
+$$$Logic
+  Logic1      = X
+  Logic2      = X
+  Logic3      = X
+  Logic4      = X
+$$$Condition
+  TimeRange   = Absolute
+  AbsTime     = "1980-01-01 00:00:00"
+  RelTime     = "2000-01-01 00:00:01"
+  RecTime     =    0hr00min01sec
+  WeeklyFlag  =   0
+  WeeklyTime  = "00:00:00"
+  Alarm       = 1
+$Annotation
+  CH1         = " CH 1"
+  CH2         = " CH 2"
+  CH3         = " CH 3"
+  CH4         = " CH 4"
+  CH5         = " CH 5"
+  CH6         = " CH 6"
+  CH7         = " CH 7"
+  CH8         = " CH 8"
+$$Pulse
+  Pulse1      = "PULSE 1"
+  Pulse2      = "PULSE 2"
+  Pulse3      = "PULSE 3"
+  Pulse4      = "PULSE 4"
+$$Logic
+  Logic1      = "LOGIC 1"
+  Logic2      = "LOGIC 2"
+  Logic3      = "LOGIC 3"
+  Logic4      = "LOGIC 4"
+$Trace
+  CH1         = On
+  CH2         = On
+  CH3         = On
+  CH4         = Off
+  CH5         = Off
+  CH6         = Off
+  CH7         = Off
+  CH8         = Off
+$$Pulse
+  Pulse1      = On
+  Pulse2      = On
+  Pulse3      = On
+  Pulse4      = On
+$$Logic
+  Logic1      = On
+  Logic2      = On
+  Logic3      = On
+  Logic4      = On
+$XY
+  XY1         =  1, 2, On ,28, 5, 6
+  XY2         =  1, 3, Off, 0,13,23
+  XY3         =  1, 4, Off, 9,22, 8
+  XY4         =  1, 2, Off,21, 0,21
+$$Position
+  CH1         =   50, 1000
+  CH2         =   50, 1000
+  CH3         =   50, 1000
+  CH4         =   50, 1000
+  CH5         =   50, 1000
+  CH6         =   50, 1000
+  CH7         =   50, 1000
+  CH8         =   50, 1000
+$Printer
+$$Annotation
+  Interval    = 30cm
+  Flying      = Off
+  TitleMode   = System
+  ChannelMode = AMP
+  TitleString = "Title Annotation"
+$EndHeader
+
