@@ -559,3 +559,25 @@ def test_close_gaps_refused_for_other_files(tmp_path):
     assert result.gaps == 1 and not result.can_close_gaps  # l'appli ne propose pas la suppression
     with pytest.raises(MergeError, match="Graphtec"):
         merge_files([tmp_path / "a.txt", tmp_path / "b.txt"], tmp_path / "g.txt", close_gaps=True)
+
+
+def test_same_rewiring_in_many_files_is_one_note(tmp_path):
+    """Retour client (#19) : 20 lignes identiques « CH3 [A] -> CH1 [A] » rendaient la fenêtre trop grande."""
+    for k, day in enumerate((21, 22, 23)):
+        graphtec_channels(tmp_path / "old_{}.CSV".format(k), "2026-09-{} 16:00:00".format(day), 10,
+                          [(2, "A", 20.0), (3, "A", 80.0), (6, "V", 48.0)])
+    graphtec_channels(tmp_path / "new.CSV", "2026-10-28 17:00:00", 10, [(1, "A", 81.0), (2, "A", 21.0), (6, "V", 49.0)])
+    result = merge_files(sorted(tmp_path.glob("*.CSV")), tmp_path / "f.csv")
+    notes = [n for n in result.notes if "associée(s) par unité" in n]
+    assert len(notes) == 1
+    assert notes[0].startswith("3 fichiers (old_0.CSV, old_1.CSV, old_2.CSV)") and "CH3 [A] -> CH1 [A]" in notes[0]
+
+
+def test_gap_total_duration(tmp_path):
+    make_gbd(tmp_path / "a.GBD", n=300, start="2026-10-29, 09:00:00")  # 30 s
+    make_gbd(tmp_path / "b.GBD", n=300, start="2026-10-29, 10:00:00")
+    make_gbd(tmp_path / "c.GBD", n=300, start="2026-10-29, 11:00:00")
+    kept = merge_files(sorted(tmp_path.glob("*.GBD")), tmp_path / "f.csv")
+    assert kept.gaps == 2 and kept.gap_total_s == pytest.approx(2 * (3600 - 29.9), abs=0.01)
+    closed = merge_files(sorted(tmp_path.glob("*.GBD")), tmp_path / "g.csv", close_gaps=True)
+    assert closed.gaps == 2 and closed.gap_total_s == pytest.approx(2 * (3600 - 30.0), abs=0.01)

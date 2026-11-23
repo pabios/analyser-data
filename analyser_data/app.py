@@ -38,7 +38,8 @@ from .fft_dialog import FftDialog
 from .corrections_dialog import ProbeCorrectionsDialog, ShiftedChannelsDialog
 from .cycles_dialog import CyclesDialog
 from .loader import write_anonymized_extract, write_extract
-from .merge import MergeError, folder_files, merge_files, merge_summary
+from .merge import MergeError, folder_files, merge_files, merge_headline, merge_summary
+from .message_window import long_choice, long_info
 from .report import build_report, save_figure_image
 from .session import format_hms_safe, is_clim_file, journal_path, legend_label
 from .plotting import PlotManager, PlotSettings, format_hms
@@ -518,25 +519,27 @@ class AnalyserDataApp:
             messagebox.showerror(_("Fusion impossible"), str(result) + _("\n\nAucun fichier n'a été écrit."),
                                  parent=self.root)
             return
-        if result.gaps and not result.gaps_closed and result.can_close_gaps and not messagebox.askyesno(
-                _("Trous entre les fichiers"),
-                _("{} trou(s) entre les fichiers (enregistreur arrêté) :\n\n{}\n\nConserver les trous ?\n\n"
-                  "• Oui : date-heure réelle, les trous restent visibles.\n"
-                  "• Non : fichiers mis bout à bout, sans trou ; la date-heure des fichiers suivants est avancée "
-                  "(mesures inchangées, noté dans le journal).").format(
-                      result.gaps, "\n".join("• " + n for n in result.gap_notes)),
-                parent=self.root):
-            paths, target = self._merge_args
-            self.merge_files(paths, target, close_gaps=True)
-            return
+        if result.gaps and not result.gaps_closed and result.can_close_gaps:
+            choice = long_choice(
+                self.root, _("Trous entre les fichiers"),
+                _("{} trou(s) entre les fichiers (enregistreur arrêté), {} au total. Conserver les trous ?\n\n"
+                  "• Conserver : date-heure réelle, les trous restent visibles.\n"
+                  "• Supprimer : fichiers mis bout à bout, sans trou ; la date-heure des fichiers suivants est "
+                  "avancée (mesures inchangées, noté dans le journal).").format(
+                      result.gaps, format_hms_safe(result.gap_total_s / 60.0)),
+                result.gap_notes,
+                [(_("Conserver les trous"), "keep", True), (_("Supprimer les trous"), "close", False)],
+                cancel="keep")
+            if choice == "close":
+                paths, target = self._merge_args
+                self.merge_files(paths, target, close_gaps=True)
+                return
         self.session.log(merge_summary(result))
         for note in result.notes:
             self.session.log(_("Fusion : {}").format(note))
-        text = merge_summary(result)
-        if result.notes:
-            text += "\n\n" + "\n".join("• " + n for n in result.notes)
-        messagebox.showinfo(_("Fusion terminée"), text + _("\n\nLe fichier fusionné va être ouvert."),
-                            parent=self.root)
+        details = [_("Fichiers, dans l'ordre chronologique : {}.").format(", ".join(p.name for p in result.files))]
+        long_info(self.root, _("Fusion terminée"),
+                  merge_headline(result) + _("\n\nLe fichier fusionné va être ouvert."), details + result.notes)
         self.open_files([str(result.path)], preview=False)
 
     def _report_unreadable(self, path: Path, message: str) -> None:

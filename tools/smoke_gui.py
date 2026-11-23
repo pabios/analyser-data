@@ -34,6 +34,12 @@ app_module.filedialog.asksaveasfilename = lambda **k: str(OUT / "export.csv")
 answers = []  # réponses aux questions oui / non, dans l'ordre (vide : « oui »)
 app_module.messagebox.askyesno = lambda *a, **k: (dialogs.append(("question",) + a),
                                                   answers.pop(0) if answers else True)[1]
+# Fenêtres à défilement (résumé de fusion, question sur les trous)
+app_module.long_info = lambda master, title, intro, details=(): dialogs.append(
+    ("info", title, intro + "\n" + "\n".join(details)))
+app_module.long_choice = lambda master, title, intro, details, buttons, cancel=None: (
+    dialogs.append(("question", title, intro + "\n" + "\n".join(details))),
+    answers.pop(0) if answers else buttons[0][1])[1]
 
 
 def pump(root, n=20):
@@ -649,7 +655,7 @@ def main():
     gui.session.clear()
     gui._checked.clear()
     dialogs.clear()
-    answers[:] = [False]
+    answers[:] = ["close"]
     gui.merge_folder(str(folder), str(folder / "dossier_trous_fusion.csv"))
     wait_idle(root, gui)
     wait_idle(root, gui)  # nouvelle fusion, sans les trous
