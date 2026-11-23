@@ -362,11 +362,59 @@ def test_gbd_with_other_channels_or_units_blocks(tmp_path):
     assert not (tmp_path / "f.csv").exists()
 
 
-def test_gbd_and_csv_are_not_mixed(tmp_path):
+def gbd_like_csv(path, start, n):
+    """Export CSV Graphtec des mêmes voies que make_gbd (V, mV, °C)."""
+    t0 = pd.Timestamp(start)
+    k = np.arange(n)
+    ch1, ch2, ch3 = 12.0 + 5 * np.sin(k / 30), 50 * np.cos(k / 40), 21.5 + k / 100
+    head = ["Vendor,GRAPHTEC Corporation", "Model,GL860", "Sampling,100ms", "Data", "No.,Date&Time,ms,CH1,CH2,CH3",
+            "NO.,Time,ms,V,mV,degC"]
+    rows = []
+    for j in range(n):
+        t = t0 + pd.Timedelta(milliseconds=100 * j)
+        rows.append("{},{}/{}/{} {:02d}:{:02d}:{:02d},{},{:+.3f},{:+.2f},{:+.1f}".format(
+            j + 1, t.year, t.month, t.day, t.hour, t.minute, t.second, t.microsecond // 1000, ch1[j], ch2[j], ch3[j]))
+    path.write_bytes(("\r\n".join(head + rows) + "\r\n").encode("cp1252"))
+    return np.round(ch1, 3), np.round(ch2, 2), np.round(ch3, 1)
+
+
+def test_gbd_and_csv_mixed(tmp_path):
+    """Retour client (#19) : un .GBD et des CSV Graphtec choisis ensemble -> fusion, plus de refus."""
+    a = make_gbd(tmp_path / "261028-171255.GBD", n=300, start="2026-10-28, 17:12:55")
+    b = gbd_like_csv(tmp_path / "Mes-_261028-171325.CSV", "2026-10-28 17:13:25", 300)  # juste après
+    out = tmp_path / "fusion.csv"
+    result = merge_files([tmp_path / "Mes-_261028-171325.CSV", tmp_path / "261028-171255.GBD"], out)
+    assert [p.name for p in result.files] == ["261028-171255.GBD", "Mes-_261028-171325.CSV"]
+    assert result.rows == 600 and result.duplicates == 0
+    assert any("réécrits au format des .GBD" in n and "Mes-_261028-171325.CSV" in n for n in result.notes)
+    assert not any("Trou" in n for n in result.notes)
+    m = load_measurement(out)
+    assert [(c.label, c.unit) for c in m.channels] == [("Channel 1", "V"), ("Channel 2", "mV"), ("Channel 3", "°C")]
+    assert len(m.data) == 600 and m.period_s == pytest.approx(0.1)
+    assert m.start == pd.Timestamp("2026-10-28 17:12:55")
+    np.testing.assert_allclose(m.data["Channel 1"].to_numpy(), np.concatenate([a[0], b[0]]), atol=1e-9)
+    np.testing.assert_allclose(m.data["Channel 2"].to_numpy(), np.concatenate([a[1], b[1]]), atol=1e-9)
+
+
+def test_gbd_and_its_own_csv_export_kept_once():
+    """Le .GBD d'exemple et son export CSV (même enregistrement) : lignes identiques, gardées une fois."""
+    import tempfile
+    root = Path(__file__).resolve().parent.parent / "exemples" / "autres_formats"
+    with tempfile.TemporaryDirectory() as tmp:
+        result = merge_files([root / "GL860_test_export.CSV", root / "GL860_test.GBD"], Path(tmp) / "f.csv")
+        assert result.rows == 6000 and result.duplicates == 6000
+        m = load_measurement(Path(tmp) / "f.csv")
+    ref = load_measurement(root / "GL860_test.GBD")
+    for c in ref.channels:
+        np.testing.assert_allclose(m.data[c.label].to_numpy(), ref.data[c.label].to_numpy(), atol=1e-9)
+
+
+def test_gbd_and_csv_with_other_channels_block(tmp_path):
     make_gbd(tmp_path / "a.GBD", n=100)
-    graphtec(tmp_path / "b.CSV", "2026-10-29 10:00:00", 50)
-    with pytest.raises(MergeError, match="a.GBD.*Graphtec .GBD.*b.CSV"):
+    graphtec(tmp_path / "b.CSV", "2026-10-29 10:00:00", 50)  # CH1 V, CH2 A
+    with pytest.raises(MergeError, match="mêmes colonnes"):
         merge_files([tmp_path / "a.GBD", tmp_path / "b.CSV"], tmp_path / "f.csv")
+    assert not (tmp_path / "f.csv").exists()
 
 
 def test_gbd_different_sampling_reported(tmp_path):

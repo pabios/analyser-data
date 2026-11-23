@@ -126,8 +126,10 @@ comme un seul essai.
   retirée et signalée (fichier, numéro de ligne, contenu). Trop de lignes illisibles : fusion bloquée.
 - **Fichiers .GBD Graphtec** : décodés comme à l'import (mise à l'échelle de l'appareil comprise),
   la date-heure vient de l'heure de début enregistrée dans le fichier. Résultat : un CSV (« ; »,
-  point décimal) qui se relit comme un export Graphtec. On fusionne soit des .GBD, soit des CSV,
-  pas les deux ensemble. Utile quand l'export CSV ne donne que le temps écoulé.
+  point décimal) qui se relit comme un export Graphtec. Utile quand l'export CSV ne donne que le
+  temps écoulé. **.GBD et CSV mélangés** : les CSV sont lus comme à l'ouverture et réécrits au même
+  format (mêmes voies et unités exigées, valeurs inchangées) ; un .GBD et son propre export CSV
+  donnent des lignes identiques, gardées une seule fois.
 - **Trous** entre fichiers et **changement d'heure** : signalés, rien n'est corrigé.
 - Exemple : `exemples/fusion/` (3 fichiers nanodac, un recouvrement de 5 min, un trou de 30 min).
 

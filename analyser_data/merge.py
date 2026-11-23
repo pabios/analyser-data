@@ -21,7 +21,10 @@ Règles validées par le client (commentaire de l'issue #19) :
   retirée et signalée (fichier, numéro de ligne, contenu) ; trop de lignes illisibles : bloquée ;
 * fichiers natifs **Graphtec .GBD** : décodés comme à l'import (mise à l'échelle de l'appareil
   comprise), la date-heure vient de l'heure de début de l'en-tête ; le fichier fusionné est un
-  CSV (« ; », point décimal) relu comme un export Graphtec. GBD et CSV ne se mélangent pas.
+  CSV (« ; », point décimal) relu comme un export Graphtec ;
+* .GBD et CSV **mélangés** (retour client) : les CSV sont lus comme à l'ouverture (mêmes voies
+  « Channel N », unités, date-heure) puis réécrits au format des .GBD ; valeurs inchangées.
+  Un .GBD et son propre export CSV donnent des lignes identiques, gardées une seule fois.
 """
 from __future__ import annotations
 
@@ -38,7 +41,7 @@ from .excel import is_excel
 from .gbd import GbdError, is_gbd, read_gbd
 from .i18n import _
 from .loader import (
-    _INDEX_NAME_RE, _TO_CSV_EOL, LoadError, _extract_time, _hms, _merge_decimal_commas, _open_text, _thousands,
+    TIME_COL, load_measurement, _INDEX_NAME_RE, _TO_CSV_EOL, LoadError, _extract_time, _hms, _merge_decimal_commas, _open_text, _thousands,
     _unwrap_quotes, analyze_text,
 )
 
@@ -70,7 +73,7 @@ class _Source:
     ignored: List[str] = field(default_factory=list)
     backward: Optional[pd.Timestamp] = None  # premier recul de l'heure
     skipped: List[tuple] = field(default_factory=list)  # lignes corrompues retirées : (numéro, contenu)
-    kind: str = "text"  # « text » ou « gbd »
+    kind: str = "text"  # « text », « gbd », ou « csv » (CSV réécrit au format des .GBD)
     period: Optional[float] = None  # .GBD : période d'échantillonnage (s)
     model: str = ""  # .GBD : modèle de l'appareil
 
@@ -99,15 +102,19 @@ def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], No
         raise MergeError(_("Le fichier fusionné ne peut pas remplacer un des fichiers d'origine : "
                            "choisissez un autre nom."))
 
+    for path in paths:
+        if not path.is_file():
+            raise MergeError(_("Fichier introuvable : {}").format(path))
+    normalized = any(is_gbd(p) for p in paths)  # un .GBD : tout au format des .GBD
     sources = []
     for i, path in enumerate(paths, start=1):
         progress(_("Lecture du fichier {}/{} : {}…").format(i, len(paths), path.name))
-        sources.append(_read_source(path))
+        sources.append(_read_source(path, normalized))
     sources.sort(key=lambda s: s.times.min())  # ordre chronologique, quel que soit le choix
     ref = sources[0]
     for other in sources[1:]:
         _check_compatible(ref, other)
-    if ref.kind == "gbd":
+    if normalized:
         ref.preamble = _gbd_preamble(ref, sources)
 
     progress(_("Tri chronologique de {} lignes…").format(_thousands(sum(len(s.lines) for s in sources))))
@@ -146,14 +153,18 @@ def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], No
     if any(s.encoding != ref.encoding for s in sources):
         notes.append(_("Encodages différents selon les fichiers : fichier fusionné écrit en {} (celui de « {} »).")
                      .format(ref.encoding, ref.path.name))
-    periods = {s.period for s in sources if s.period}
+    periods = {round(s.period, 6) for s in sources if s.period}
     if len(periods) > 1:
-        notes.append(_("Périodes d'échantillonnage différentes selon les fichiers .GBD ({}) : lignes rangées par "
+        notes.append(_("Périodes d'échantillonnage différentes selon les fichiers ({}) : lignes rangées par "
                        "date-heure, rien n'est rééchantillonné.").format(
                            ", ".join("{:g} ms".format(p * 1000) for p in sorted(periods))))
-    if ref.kind == "gbd":
+    if normalized:
         notes.append(_("Fichiers Graphtec .GBD décodés comme à l'import (mise à l'échelle de l'appareil comprise) "
                        "et écrits en CSV."))
+        rewritten = [s.path.name for s in sources if s.kind == "csv"]
+        if rewritten:
+            notes.append(_("CSV relus comme à l'ouverture et réécrits au format des .GBD (« ; », point décimal) : "
+                           "{}. Valeurs et date-heure inchangées.").format(", ".join(rewritten)))
     elif len(ref.preamble) > 1:  # bloc d'en-tête d'appareil (Vendor, Model…) en plus des titres
         notes.append(_("En-tête recopié de « {} » (le plus ancien) : ses informations (nombre de points, début, "
                        "fin…) restent celles de ce fichier.").format(ref.path.name))
@@ -182,7 +193,7 @@ def merge_summary(result: MergeResult) -> str:
 
 # ---------------------------------------------------------------------------------------------
 
-def _read_source(path: Path) -> _Source:
+def _read_source(path: Path, normalized: bool = False) -> _Source:
     if not path.is_file():
         raise MergeError(_("Fichier introuvable : {}").format(path))
     if is_gbd(path):
@@ -190,6 +201,8 @@ def _read_source(path: Path) -> _Source:
     if is_excel(path) or path.suffix.lower() not in TEXT_SUFFIXES:
         raise MergeError(_("« {} » : seuls les fichiers texte (CSV, TXT, DAT, TSV) et Graphtec .GBD peuvent être "
                            "fusionnés.").format(path.name))
+    if normalized:
+        return _read_measured_source(path)
     try:
         layout = analyze_text(path)
     except LoadError as exc:
@@ -278,31 +291,59 @@ def _read_gbd_source(path: Path) -> _Source:
         frame, info = read_gbd(path)
     except (GbdError, OSError, ValueError) as exc:
         raise MergeError(_("« {} » est illisible :\n{}").format(path.name, exc)) from None
-    headers = ["Date&Time"] + ["{} [{}]".format(c, u) if u else c for c, u in zip(frame.columns[1:], info["units"])]
+    times = pd.DatetimeIndex(frame["Date&Time"]).asi8.astype(np.int64)
+    return _normalized_source(path, "gbd", times, frame.iloc[:, 1:], list(frame.columns[1:]), info["units"],
+                              info["period"], info["model"])
+
+
+def _read_measured_source(path: Path) -> _Source:
+    """CSV fusionné avec des .GBD : lu comme à l'ouverture (voies « Channel N », unités, date-heure),
+    puis présenté comme un .GBD décodé pour que les lignes des deux se comparent."""
+    try:
+        m = load_measurement(path)
+    except LoadError as exc:
+        raise MergeError(_("« {} » est illisible :\n{}").format(path.name, exc)) from None
+    if m.start is None:
+        raise MergeError(_("« {} » : la colonne temps ne donne pas de date-heure (temps écoulé seulement) : "
+                           "impossible de ranger les fichiers dans l'ordre chronologique.\nPour des essais Graphtec, "
+                           "fusionnez plutôt les fichiers .GBD d'origine : ils contiennent l'heure de début.")
+                         .format(path.name))
+    elapsed_ns = np.round(np.asarray(m.data[TIME_COL], dtype=float) * 60e9).astype(np.int64)
+    names = [re.sub(r"^Channel\s*(\d+)$", r"CH\1", ch.label) for ch in m.channels]
+    values = m.data[[ch.label for ch in m.channels]]
+    return _normalized_source(path, "csv", m.start.value + elapsed_ns, values, names,
+                              [ch.unit for ch in m.channels], m.period_s, "")
+
+
+def _normalized_source(path: Path, kind: str, times: np.ndarray, values: pd.DataFrame, names: List[str],
+                       units: List[str], period: float, model: str) -> _Source:
+    """Une ligne « date-heure;valeur;… » par mesure (« ; », point décimal), au format des .GBD décodés.
+    Date-heure arrondie à la microseconde : un .GBD et son export CSV donnent les mêmes lignes."""
+    times = (np.round(np.asarray(times, dtype=np.int64) / 1000.0) * 1000).astype(np.int64)
+    headers = ["Date&Time"] + ["{} [{}]".format(c, u) if u else c for c, u in zip(names, units)]
+    frame = pd.DataFrame({"Date&Time": pd.to_datetime(times)})
+    for i, name in enumerate(names):
+        frame[i] = np.asarray(values.iloc[:, i], dtype=float) + 0.0  # « -0.00 » du CSV -> 0, comme le .GBD
     text = frame.to_csv(sep=";", index=False, header=False, date_format="%Y-%m-%d %H:%M:%S.%f",
                         float_format="%.10g", **{_TO_CSV_EOL: "\n"})
     lines = text.split("\n")[:-1]
-    times = pd.DatetimeIndex(frame["Date&Time"]).asi8.astype(np.int64)
     backward = None
     if (np.diff(times) < 0).any():
         backward = pd.Timestamp(int(times[int(np.flatnonzero(np.diff(times) < 0)[0]) + 1]))
     return _Source(path, "utf-8", False, "\r\n", ";", ".", headers, [";".join(headers)], lines, times, lines,
-                   "gbd", lines[0].split(";")[0] if lines else "", backward=backward, kind="gbd",
-                   period=info["period"], model=info["model"])
+                   "gbd", lines[0].split(";")[0] if lines else "", backward=backward, kind=kind,
+                   period=period, model=model)
 
 
 def _gbd_preamble(ref: _Source, sources: List[_Source]) -> List[str]:
     """En-tête du CSV fusionné à partir de .GBD : relu comme un export Graphtec."""
-    return ["Vendor;GRAPHTEC Corporation", "Model;{}".format(ref.model), "Sampling;{:g}ms".format(ref.period * 1000),
+    model = next((s.model for s in sources if s.model), "")
+    return ["Vendor;GRAPHTEC Corporation", "Model;{}".format(model), "Sampling;{:g}ms".format(round(ref.period * 1000, 6)),
             "Total data points;{}".format(sum(len(s.lines) for s in sources)), "Data", ";".join(ref.headers)]
 
 
 def _check_compatible(ref: _Source, other: _Source) -> None:
     name = other.path.name
-    if other.kind != ref.kind:
-        gbd, text = (other, ref) if other.kind == "gbd" else (ref, other)
-        raise MergeError(_("« {} » est un fichier Graphtec .GBD et « {} » un fichier texte : fusionnez soit "
-                           "uniquement des .GBD, soit uniquement des CSV.").format(gbd.path.name, text.path.name))
     if other.sep != ref.sep:
         raise MergeError(_("« {} » n'a pas le même séparateur que « {} » ({} au lieu de {}) : fusion impossible.")
                          .format(name, ref.path.name, _(_SEP_NAMES.get(other.sep, other.sep)),
