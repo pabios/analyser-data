@@ -581,3 +581,26 @@ def test_gap_total_duration(tmp_path):
     assert kept.gaps == 2 and kept.gap_total_s == pytest.approx(2 * (3600 - 29.9), abs=0.01)
     closed = merge_files(sorted(tmp_path.glob("*.GBD")), tmp_path / "g.csv", close_gaps=True)
     assert closed.gaps == 2 and closed.gap_total_s == pytest.approx(2 * (3600 - 30.0), abs=0.01)
+
+
+def test_kept_gaps_are_still_there_when_the_merged_file_is_opened(tmp_path):
+    """Retour client (#19) : « Conserver les trous », pourtant le graphique collait tout. L'en-tête
+    écrit (Sampling + Total data points) faisait recalculer le temps sans les trous à la relecture."""
+    make_gbd(tmp_path / "a.GBD", n=300, start="2026-10-29, 09:00:00")
+    make_gbd(tmp_path / "b.GBD", n=300, start="2026-10-29, 10:00:00")
+    merge_files([tmp_path / "a.GBD", tmp_path / "b.GBD"], tmp_path / "f.csv")
+    m = load_measurement(tmp_path / "f.csv")
+    assert m.duration_min == pytest.approx(60 + 29.9 / 60)  # le trou d'une heure est là
+    assert m.period_s == pytest.approx(0.1)
+    assert m.start == pd.Timestamp("2026-10-29 09:00:00")
+    assert not any("incohérent" in w for w in m.warnings)
+
+
+def test_mixed_sampling_periods_keep_their_real_time(tmp_path):
+    """Son cas : .GBD à 100 ms et à 60 s fusionnés -> chaque ligne garde sa date-heure."""
+    make_gbd(tmp_path / "a.GBD", n=300, start="2026-10-29, 09:00:00")
+    make_gbd(tmp_path / "b.GBD", n=30, sample="60s", start="2026-10-29, 12:00:00")
+    merge_files([tmp_path / "a.GBD", tmp_path / "b.GBD"], tmp_path / "f.csv")
+    m = load_measurement(tmp_path / "f.csv")
+    assert m.duration_min == pytest.approx(3 * 60 + 29)  # 09:00:00 -> 12:29:00
+    assert not any("incohérent" in w for w in m.warnings)

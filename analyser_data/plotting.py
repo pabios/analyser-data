@@ -11,6 +11,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import warnings
+
 import numpy as np
 from matplotlib.ticker import FuncFormatter, Locator, MaxNLocator
 
@@ -404,16 +406,31 @@ class _Trace:
         self.gaps = _gaps(self.x)
 
 
-def _gaps(x: np.ndarray) -> np.ndarray:
-    """Indices i après lesquels l'enregistrement s'interrompt (x[i+1] - x[i] > 10 périodes) :
-    la courbe y est coupée au lieu d'un long trait droit trompeur (issue #16)."""
+def _gaps(x: np.ndarray, window: int = 20) -> np.ndarray:
+    """Indices i après lesquels l'enregistrement s'interrompt : x[i+1] - x[i] > 10 périodes
+    *locales* (médiane des 20 pas avant et des 20 pas après, la plus grande des deux). La courbe y
+    est coupée au lieu d'un long trait droit trompeur (issue #16). Période locale et non globale :
+    un fichier fusionné peut mêler 100 ms et 60 s (retour client #19) ; la partie à 60 s ne doit
+    pas être coupée à chaque point."""
     if len(x) < 3:
         return np.zeros(0, dtype=np.int64)
     diffs = np.diff(x)
     positive = diffs[diffs > 0]
     if not len(positive):
         return np.zeros(0, dtype=np.int64)
-    return np.flatnonzero(diffs > 10 * float(np.median(positive)))
+    candidates = np.flatnonzero(diffs > 10 * float(np.median(positive)))
+    if not len(candidates):
+        return candidates
+    steps = np.where(diffs > 0, diffs, np.nan)
+    padded = np.concatenate([np.full(window, np.nan), steps, np.full(window, np.nan)])
+    windows = np.lib.stride_tricks.sliding_window_view(padded, window)
+    with np.errstate(all="ignore"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # fenêtre vide (bord) : NaN
+        left = np.nanmedian(windows[candidates], axis=1)  # pas candidates-20 … candidates-1
+        right = np.nanmedian(windows[candidates + window + 1], axis=1)  # pas candidates+1 … +20
+    local = np.fmax(left, right)
+    local = np.where(np.isfinite(local), local, float(np.median(positive)))
+    return candidates[diffs[candidates] > 10 * local]
 
 
 class PlotManager:

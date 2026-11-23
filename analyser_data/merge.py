@@ -483,7 +483,7 @@ def _read_gbd_source(path: Path) -> _Source:
         frame, info = read_gbd(path)
     except (GbdError, OSError, ValueError) as exc:
         raise MergeError(_("« {} » est illisible :\n{}").format(path.name, exc)) from None
-    times = pd.DatetimeIndex(frame["Date&Time"]).asi8.astype(np.int64)
+    times = np.asarray(frame["Date&Time"], dtype="datetime64[ns]").view(np.int64)  # ns, quelle que soit la résolution de pandas
     return _normalized_source(path, "gbd", times, frame.iloc[:, 1:], list(frame.columns[1:]), info["units"],
                               info["period"], info["model"])
 
@@ -522,10 +522,13 @@ def _normalized_source(path: Path, kind: str, times: np.ndarray, values: pd.Data
 
 
 def _gbd_preamble(ref: _Source, sources: List[_Source]) -> List[str]:
-    """En-tête du CSV fusionné à partir de .GBD : relu comme un export Graphtec."""
+    """En-tête du CSV fusionné au format des .GBD : relu comme un export Graphtec.
+
+    Ni « Sampling » ni « Total data points » : le fichier n'est plus un enregistrement continu
+    (trous, périodes différentes). Sinon, à la relecture, le temps était recalculé à partir de
+    l'en-tête (points × période) et les trous disparaissaient du graphique (retour client #19)."""
     model = next((s.model for s in sources if s.model), "")
-    return ["Vendor;GRAPHTEC Corporation", "Model;{}".format(model), "Sampling;{:g}ms".format(round(ref.period * 1000, 6)),
-            "Total data points;{}".format(sum(len(s.lines) for s in sources)), "Data", ";".join(ref.headers)]
+    return ["Vendor;GRAPHTEC Corporation", "Model;{}".format(model), "Data", ";".join(ref.headers)]
 
 
 def _check_compatible(ref: _Source, other: _Source) -> None:

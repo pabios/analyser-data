@@ -652,6 +652,18 @@ def main():
     folder.mkdir()
     make_gbd(folder / "a.GBD", n=600, start="2026-10-28, 17:00:00")
     make_gbd(folder / "b.GBD", n=600, start="2026-10-28, 18:00:00")
+    make_gbd(folder / "c.GBD", n=30, sample="60s", start="2026-10-28, 18:30:00")  # autre période
+    # « Conserver les trous » : le graphique doit les montrer (retour client)
+    gui.session.clear()
+    gui._checked.clear()
+    dialogs.clear()
+    answers[:] = ["keep"]
+    gui.merge_folder(str(folder), str(folder / "dossier_trous_fusion.csv"))
+    wait_idle(root, gui)
+    wait_idle(root, gui)
+    fm = gui.session.measurements["dossier_trous_fusion.csv"]
+    assert len(fm.data) == 1230 and abs(fm.duration_min - 119.0) < 0.01, fm.duration_min  # 17:00 -> 18:59
+    shot(root, "45a_fusion_trous_conserves.png")
     gui.session.clear()
     gui._checked.clear()
     dialogs.clear()
@@ -665,7 +677,7 @@ def main():
     infos = [d for d in dialogs if d[0] == "info" and d[1] == "Fusion terminée"]
     assert infos and "supprimé" in infos[-1][2], dialogs
     fm = gui.session.measurements["dossier_trous_fusion.csv"]
-    assert len(fm.data) == 1200 and fm.duration_min < 2.1, fm.duration_min
+    assert len(fm.data) == 1230 and fm.duration_min < 32, fm.duration_min  # 2 min à 100 ms + 30 min à 1 min
     shot(root, "45_fusion_sans_trous.png")
 
     # Retour client : partie en négatif -> valeur absolue sur la zone affichée
