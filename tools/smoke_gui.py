@@ -617,6 +617,23 @@ def main():
     errors = [d for d in dialogs if d[0] == "error"]
     assert errors and errors[0][1] == "Fusion impossible" and "nanodac_T_P.txt" in errors[0][2], dialogs
     assert not bad.exists()
+    # Retour client : tout un dossier (.GBD + son export CSV : doublons gardés une fois)
+    import shutil
+    folder = OUT / "dossier_gbd"
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir()
+    for name in ("GL860_test.GBD", "GL860_test_export.CSV"):
+        shutil.copy(ROOT / "exemples" / "autres_formats" / name, folder / name)
+    gui.session.clear()
+    gui._checked.clear()
+    dialogs.clear()
+    gui.merge_folder(str(folder), str(folder / "dossier_gbd_fusion.csv"))
+    wait_idle(root, gui)
+    wait_idle(root, gui)
+    infos = [d for d in dialogs if d[0] == "info" and d[1] == "Fusion terminée"]
+    assert infos and "6 000 lignes" in infos[0][2] and "réécrits au format des .GBD" in infos[0][2], dialogs
+    assert list(gui.session.measurements) == ["dossier_gbd_fusion.csv"], list(gui.session.measurements)
+    shot(root, "44_fusion_dossier.png")
     print("fusion chronologique : OK")
 
     help_window = app_module.HelpWindow.open(root, "Nettoyage")

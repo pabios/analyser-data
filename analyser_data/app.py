@@ -38,7 +38,7 @@ from .fft_dialog import FftDialog
 from .corrections_dialog import ProbeCorrectionsDialog, ShiftedChannelsDialog
 from .cycles_dialog import CyclesDialog
 from .loader import write_anonymized_extract, write_extract
-from .merge import MergeError, merge_files, merge_summary
+from .merge import MergeError, folder_files, merge_files, merge_summary
 from .report import build_report, save_figure_image
 from .session import is_clim_file, journal_path, legend_label
 from .plotting import PlotManager, PlotSettings, format_hms
@@ -173,7 +173,13 @@ class AnalyserDataApp:
         button = ttk.Button(actions, text=_("Réinitialiser"), command=self.reset_all)
         button.pack(side=tk.LEFT, padx=(0, 6))
         self._action_buttons.append(button)
-        button = ttk.Button(actions, text=_("Fusionner…"), command=self.merge_files)
+        button = ttk.Menubutton(actions, text=_("Fusionner  ▾"), style="TMenubutton")
+        menu = tk.Menu(button, tearoff=False, background=C["card"], foreground=C["fg"],
+                       activebackground=C["muted"], activeforeground=C["fg"], bd=1, relief=tk.SOLID,
+                       font=self.fonts.base)
+        menu.add_command(label=_("Des fichiers…"), command=self.merge_files)
+        menu.add_command(label=_("Tout un dossier…"), command=self.merge_folder)
+        button.configure(menu=menu)
         button.pack(side=tk.LEFT, padx=(0, 6))
         self._action_buttons.append(button)
         self.export_button = ttk.Menubutton(actions, text=_("Exporter  ▾"), style="TMenubutton")
@@ -449,7 +455,24 @@ class AnalyserDataApp:
         for path, message in errors:
             self._report_unreadable(path, message)
 
-    def merge_files(self, paths: List[str] = None, target: str = None) -> None:
+    def merge_folder(self, folder: str = None, target: str = None) -> None:
+        """Retour client (#19) : tous les CSV / .GBD d'un dossier fusionnés d'un coup."""
+        if self.busy:
+            return
+        if folder is None:
+            folder = filedialog.askdirectory(parent=self.root, title=_("Dossier à fusionner"),
+                                             initialdir=self._last_dir, mustexist=True)
+        if not folder:
+            return
+        try:
+            paths = [str(p) for p in folder_files(folder)]
+        except MergeError as exc:
+            messagebox.showinfo(_("Fusion"), str(exc), parent=self.root)
+            return
+        self._last_dir = str(folder)
+        self.merge_files(paths, target, default_name="{}_fusion.csv".format(Path(folder).name))
+
+    def merge_files(self, paths: List[str] = None, target: str = None, default_name: str = None) -> None:
         """Issue #19 : plusieurs CSV (ou .GBD Graphtec) fusionnés en un seul fichier trié par date-heure, puis ouvert
         comme un seul essai. ``paths`` / ``target`` : pour les scripts (sans boîte de dialogue)."""
         if self.busy:
@@ -469,7 +492,7 @@ class AnalyserDataApp:
             suffix = ".csv" if first.suffix.lower() in ("", ".gbd") else first.suffix  # .GBD -> CSV
             target = filedialog.asksaveasfilename(
                 parent=self.root, title=_("Enregistrer le fichier fusionné"), initialdir=str(first.parent),
-                initialfile=_("{}_fusion{}").format(first.stem, suffix), defaultextension=suffix,
+                initialfile=default_name or _("{}_fusion{}").format(first.stem, suffix), defaultextension=suffix,
                 filetypes=[(_("Texte (CSV, TXT, DAT)"), "*.csv *.txt *.dat *.CSV *.TXT *.DAT")])
         if not target:
             return

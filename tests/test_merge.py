@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from analyser_data.loader import load_measurement
-from analyser_data.merge import MergeError, date_shape, merge_files, merge_summary
+from analyser_data.merge import MergeError, date_shape, folder_files, merge_files, merge_summary
 from analyser_data.session import Session
 
 from test_gbd import make_gbd
@@ -357,7 +357,7 @@ def test_gbd_with_other_channels_or_units_blocks(tmp_path):
     make_gbd(tmp_path / "a.GBD", n=100)
     make_gbd(tmp_path / "b.GBD", n=100, start="2026-10-29, 10:00:00",
              amp={"CH1": "DC, 20V, Off", "CH2": "DC, 20V, Off", "CH3": "TEMP, TC_K, Off"})
-    with pytest.raises(MergeError, match="b.GBD.*mêmes colonnes"):
+    with pytest.raises(MergeError, match="a.GBD.*mêmes voies.*b.GBD.*absente.*CH2 \\[V\\].*en plus.*CH2 \\[mV\\]"):
         merge_files([tmp_path / "a.GBD", tmp_path / "b.GBD"], tmp_path / "f.csv")
     assert not (tmp_path / "f.csv").exists()
 
@@ -412,7 +412,7 @@ def test_gbd_and_its_own_csv_export_kept_once():
 def test_gbd_and_csv_with_other_channels_block(tmp_path):
     make_gbd(tmp_path / "a.GBD", n=100)
     graphtec(tmp_path / "b.CSV", "2026-10-29 10:00:00", 50)  # CH1 V, CH2 A
-    with pytest.raises(MergeError, match="mêmes colonnes"):
+    with pytest.raises(MergeError, match="a.GBD.*mêmes voies.*b.CSV.*absente.*CH2 \\[A\\].*en plus.*mV"):
         merge_files([tmp_path / "a.GBD", tmp_path / "b.CSV"], tmp_path / "f.csv")
     assert not (tmp_path / "f.csv").exists()
 
@@ -424,3 +424,94 @@ def test_gbd_different_sampling_reported(tmp_path):
     assert result.rows == 200
     assert any("Périodes d'échantillonnage différentes" in n and "100 ms" in n and "1000 ms" in n
                for n in result.notes)
+
+
+# --- Câblage changé entre deux essais (retour client sur #19) ----------------------------------
+
+def graphtec_channels(path, start, n, channels, model="GL980"):
+    """CSV Graphtec avec les voies ``channels`` = [(numéro, unité, valeur de base)]."""
+    t0 = pd.Timestamp(start)
+    head = ["Vendor,GRAPHTEC Corporation", "Model,{}".format(model), "Sampling,1s", "Data",
+            "No.,Date&Time,ms," + ",".join("CH{}".format(c) for c, _u, _v in channels),
+            "NO.,Time,ms," + ",".join(u for _c, u, _v in channels)]
+    rows = []
+    for j in range(n):
+        t = t0 + pd.Timedelta(seconds=j)
+        rows.append("{},{},0,".format(j + 1, t.strftime("%Y/%m/%d %H:%M:%S"))
+                    + ",".join("{:+.3f}".format(v + j / 1000) for _c, _u, v in channels))
+    path.write_bytes(("\r\n".join(head + rows) + "\r\n").encode("cp1252"))
+
+
+def test_rewired_channel_matched_by_unit(tmp_path):
+    """Capture du client : CH3 [A] des anciens fichiers est devenue CH1 [A] ; CH2 et CH6 inchangées."""
+    graphtec_channels(tmp_path / "Mes-_260921-164742.CSV", "2026-09-21 16:47:49", 30,
+                      [(2, "A", 20.0), (3, "A", 80.0), (6, "V", 48.0)])
+    graphtec_channels(tmp_path / "Mes-_261028-171255.CSV", "2026-10-28 17:12:55", 30,
+                      [(1, "A", 81.0), (2, "A", 21.0), (6, "V", 49.0)])
+    out = tmp_path / "f.csv"
+    result = merge_files(sorted(tmp_path.glob("Mes-*.CSV")), out)
+    assert result.rows == 60
+    note = next(n for n in result.notes if "associée(s) par unité" in n)
+    assert "Mes-_260921-164742.CSV" in note and "CH3 [A] -> CH1 [A]" in note and "Mes-_261028-171255.CSV" in note
+    m = load_measurement(out)
+    assert [(c.label, c.unit) for c in m.channels] == [("Channel 1", "A"), ("Channel 2", "A"), ("Channel 6", "V")]
+    ch1 = m.data["Channel 1"].to_numpy()
+    assert ch1[0] == pytest.approx(80.0) and ch1[30] == pytest.approx(81.0)  # ancienne CH3, puis CH1
+    assert m.data["Channel 2"].to_numpy()[0] == pytest.approx(20.0)
+    assert m.data["Channel 6"].to_numpy()[0] == pytest.approx(48.0)
+
+
+def test_rewired_gbd_and_old_csv(tmp_path):
+    """Même cas avec le .GBD récent (CH1 V, CH2 mV, CH3 °C) et un ancien CSV où CH1 s'appelait CH4."""
+    make_gbd(tmp_path / "261028-171255.GBD", n=50, start="2026-10-28, 17:12:55")
+    graphtec_channels(tmp_path / "Mes-_260921.CSV", "2026-09-21 16:47:49", 20,
+                      [(4, "V", 12.0), (2, "mV", 40.0), (3, "degC", 21.0)])
+    result = merge_files([tmp_path / "261028-171255.GBD", tmp_path / "Mes-_260921.CSV"], tmp_path / "f.csv")
+    assert result.rows == 70
+    assert any("CH4 [V] -> CH1 [V]" in n for n in result.notes)
+    m = load_measurement(tmp_path / "f.csv")
+    assert [c.label for c in m.channels] == ["Channel 1", "Channel 2", "Channel 3"]
+    assert m.data["Channel 1"].to_numpy()[0] == pytest.approx(12.0)
+
+
+def test_ambiguous_rewiring_blocks(tmp_path):
+    """Deux voies en A ont changé de numéro : impossible de savoir laquelle va où."""
+    graphtec_channels(tmp_path / "a.CSV", "2026-09-21 16:00:00", 10, [(3, "A", 1.0), (4, "A", 2.0)])
+    graphtec_channels(tmp_path / "b.CSV", "2026-10-21 16:00:00", 10, [(1, "A", 1.0), (2, "A", 2.0)])
+    with pytest.raises(MergeError, match="plusieurs voies en A.*CH3 \\[A\\], CH4 \\[A\\].*CH1 \\[A\\], CH2"):
+        merge_files([tmp_path / "a.CSV", tmp_path / "b.CSV"], tmp_path / "f.csv")
+    assert not (tmp_path / "f.csv").exists()
+
+
+def test_non_graphtec_csv_with_other_columns_still_blocked(tmp_path):
+    """Hors Graphtec, colonnes différentes : toujours refusé (lignes recopiées telles quelles)."""
+    nanodac(tmp_path / "a.txt", "2026-11-20 08:00:00", 30)
+    rows = nanodac(tmp_path / "b.txt", "2026-11-20 09:00:00", 30)
+    (tmp_path / "b.txt").write_bytes(("\r\n".join([NANODAC_HEAD.replace("Channel 2", "Channel 5")] + rows)
+                                      + "\r\n").encode("cp1252"))
+    with pytest.raises(MergeError, match="mêmes colonnes"):
+        merge_files([tmp_path / "a.txt", tmp_path / "b.txt"], tmp_path / "f.txt")
+
+
+def test_whole_folder(tmp_path):
+    """Retour client (#19) : « je veux pouvoir charger les dossiers directement »."""
+    folder = tmp_path / "essai"
+    folder.mkdir()
+    make_gbd(folder / "261028-171255.GBD", n=300, start="2026-10-28, 17:12:55")
+    gbd_like_csv(folder / "Mes-_261028-171325.CSV", "2026-10-28 17:13:25", 300)
+    (folder / "notes.docx").write_bytes(b"PK")  # ignoré
+    (folder / "essai_fusion.csv").write_text("ancienne fusion", encoding="utf-8")  # ignoré
+    (folder / "sous-dossier").mkdir()
+    files = folder_files(folder)
+    assert [p.name for p in files] == ["261028-171255.GBD", "Mes-_261028-171325.CSV"]
+    result = merge_files(files, folder / "essai_fusion.csv")  # écrase l'ancienne fusion, pas une source
+    assert result.rows == 600
+    assert [p.name for p in folder_files(folder)] == ["261028-171255.GBD", "Mes-_261028-171325.CSV"]
+
+
+def test_folder_with_less_than_two_files(tmp_path):
+    (tmp_path / "seul.csv").write_text("x", encoding="utf-8")
+    with pytest.raises(MergeError, match="1 fichier"):
+        folder_files(tmp_path)
+    with pytest.raises(MergeError, match="introuvable"):
+        folder_files(tmp_path / "absent")

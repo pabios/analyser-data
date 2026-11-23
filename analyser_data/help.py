@@ -337,32 +337,50 @@ report, and are recorded in the log. The original measurements are never changed
 channel name)."""),
 
     ("Fusion", "Fusionner des fichiers", """\
-« Fusionner… » (en haut) : un essai enregistré en plusieurs fichiers CSV devient
-un seul fichier, trié par date-heure, puis ouvert comme un seul essai continu.
-• Choisissez les fichiers dans n'importe quel ordre, puis le nom du fichier fusionné.
-• Les fichiers doivent avoir les mêmes titres de colonnes, le même séparateur, la même
-  décimale et le même format de date. Sinon rien n'est écrit et le message nomme le
-  fichier en cause. La colonne temps doit donner une date-heure (pas seulement un temps
-  écoulé).
-• Les lignes de mesure sont recopiées telles quelles. En haut : l'en-tête du fichier le
-  plus ancien et une seule ligne de titres. Encodage et fins de ligne d'origine.
-• Ligne identique dans deux fichiers (même date-heure, mêmes valeurs) : gardée une fois.
-  Même date-heure avec des valeurs différentes : les deux lignes sont gardées, avec un
-  avertissement.
+« Fusionner ▾ » (en haut) : un essai enregistré en plusieurs fichiers (CSV ou Graphtec
+.GBD) devient un seul fichier, trié par date-heure, puis ouvert comme un seul essai.
+• « Des fichiers… » : choisissez-les dans n'importe quel ordre. « Tout un dossier… » :
+  tous les CSV, TXT, DAT, TSV et .GBD du dossier (un ancien fichier « …_fusion » est
+  laissé de côté). Puis choisissez le nom du fichier fusionné.
+• Les fichiers doivent avoir les mêmes voies, le même séparateur, la même décimale et le
+  même format de date (« 2026/9/21 » et « 2026/10/1 » : même format). Sinon rien n'est
+  écrit et le message nomme le fichier en cause. Il faut une date-heure, pas seulement un
+  temps écoulé.
+• CSV seuls : lignes recopiées telles quelles, en-tête du fichier le plus ancien, une
+  seule ligne de titres, encodage et fins de ligne d'origine.
+• Avec des .GBD : ils sont décodés comme à l'ouverture (mise à l'échelle de l'appareil
+  comprise) ; les CSV choisis avec eux sont lus comme à l'ouverture et réécrits au même
+  format (« ; », point décimal), valeurs inchangées.
+• Câblage changé (Graphtec) : une voie qui a changé de numéro est retrouvée par son unité
+  quand il n'y a qu'une possibilité (ex. ancienne CH3 [A] -> CH1 [A]). Les voies prennent
+  les noms du fichier le plus récent ; chaque correspondance est signalée. Si plusieurs
+  voies de même unité ont changé, la fusion est refusée.
+• Ligne identique dans deux fichiers : gardée une fois. Même date-heure avec des valeurs
+  différentes : les deux gardées, avec un avertissement. Ligne corrompue isolée (date
+  illisible) : retirée et signalée.
 • Trous entre fichiers et changement d'heure : signalés, rien n'est corrigé ni ajouté.
 Tout est noté dans le journal. Exemple : exemples/fusion (3 fichiers, un doublon de
 5 min, un trou de 30 min).""",
      "Merge", """\
-“Merge…” (at the top): a test recorded in several CSV files becomes a single file,
-sorted by date and time, then opened as one continuous test.
-• Choose the files in any order, then the name of the merged file.
-• The files must have the same column titles, separator, decimal mark and date
-  format. Otherwise nothing is written and the message names the file at fault. The
-  time column must give a date-time (not only an elapsed time).
-• Measurement rows are copied as they are. At the top: the header of the oldest file
-  and a single title row. Original encoding and line endings.
-• Row identical in two files (same date-time, same values): kept once. Same date-time
-  with different values: both rows are kept, with a warning.
+“Merge ▾” (at the top): a test recorded in several files (CSV or Graphtec .GBD) becomes
+a single file, sorted by date and time, then opened as one test.
+• “Files…”: choose them in any order. “A whole folder…”: every CSV, TXT, DAT, TSV and
+  .GBD file of the folder (an earlier “…_fusion” file is left out). Then choose the name
+  of the merged file.
+• The files must have the same channels, separator, decimal mark and date format
+  (“2026/9/21” and “2026/10/1”: same format). Otherwise nothing is written and the
+  message names the file at fault. A date-time is needed, not only an elapsed time.
+• CSV files only: rows copied as they are, header of the oldest file, a single title
+  row, original encoding and line endings.
+• With .GBD files: decoded as on opening (device scaling included); CSV files chosen
+  with them are read as on opening and rewritten in the same format (“;”, decimal
+  point), values unchanged.
+• Rewired channels (Graphtec): a channel whose number changed is found by its unit when
+  there is only one possibility (e.g. old CH3 [A] -> CH1 [A]). Channels take the names of
+  the most recent file; each match is reported. If several channels with the same unit
+  changed, the merge is refused.
+• Row identical in two files: kept once. Same date-time with different values: both
+  kept, with a warning. Isolated corrupted row (unreadable date): removed and reported.
 • Gaps between files and daylight saving changes: reported, nothing is corrected or
   added.
 Everything is recorded in the log. Example: exemples/fusion (3 files, a 5 min

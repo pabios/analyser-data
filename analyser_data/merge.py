@@ -24,7 +24,11 @@ Règles validées par le client (commentaire de l'issue #19) :
   CSV (« ; », point décimal) relu comme un export Graphtec ;
 * .GBD et CSV **mélangés** (retour client) : les CSV sont lus comme à l'ouverture (mêmes voies
   « Channel N », unités, date-heure) puis réécrits au format des .GBD ; valeurs inchangées.
-  Un .GBD et son propre export CSV donnent des lignes identiques, gardées une seule fois.
+  Un .GBD et son propre export CSV donnent des lignes identiques, gardées une seule fois ;
+* **câblage changé** entre deux essais (retour client : l'ancienne voie 3 est devenue la voie 1) :
+  au format des .GBD (et pour des CSV Graphtec seuls), les voies de même nom et même unité restent
+  liées, les autres sont associées par unité quand il n'y a qu'une possibilité ; les voies prennent
+  les noms du fichier le plus récent et chaque renommage est signalé. Ambigu : fusion bloquée.
 """
 from __future__ import annotations
 
@@ -55,6 +59,10 @@ class MergeError(Exception):
     """Fusion impossible (message destiné à l'utilisateur, nomme le fichier en cause)."""
 
 
+class _ColumnsError(MergeError):
+    """Colonnes différentes : pour des CSV Graphtec, on réessaie en faisant correspondre les voies."""
+
+
 @dataclass
 class _Source:
     path: Path
@@ -76,6 +84,9 @@ class _Source:
     kind: str = "text"  # « text », « gbd », ou « csv » (CSV réécrit au format des .GBD)
     period: Optional[float] = None  # .GBD : période d'échantillonnage (s)
     model: str = ""  # .GBD : modèle de l'appareil
+    values: Optional[np.ndarray] = None  # format des .GBD : valeurs (lignes × voies), écrites après correspondance
+    channels: List[tuple] = field(default_factory=list)  # format des .GBD : (nom, unité) de chaque voie
+    renamed: List[str] = field(default_factory=list)  # voies renommées pour suivre le fichier le plus récent
 
 
 @dataclass
@@ -106,14 +117,14 @@ def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], No
         if not path.is_file():
             raise MergeError(_("Fichier introuvable : {}").format(path))
     normalized = any(is_gbd(p) for p in paths)  # un .GBD : tout au format des .GBD
-    sources = []
-    for i, path in enumerate(paths, start=1):
-        progress(_("Lecture du fichier {}/{} : {}…").format(i, len(paths), path.name))
-        sources.append(_read_source(path, normalized))
-    sources.sort(key=lambda s: s.times.min())  # ordre chronologique, quel que soit le choix
+    try:
+        sources = _read_all(paths, normalized, progress)
+    except _ColumnsError:
+        if normalized or not all(_is_graphtec_csv(p) for p in paths):
+            raise
+        normalized = True  # CSV Graphtec dont les voies ont changé de numéro : correspondance des voies
+        sources = _read_all(paths, normalized, progress)
     ref = sources[0]
-    for other in sources[1:]:
-        _check_compatible(ref, other)
     if normalized:
         ref.preamble = _gbd_preamble(ref, sources)
 
@@ -158,9 +169,14 @@ def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], No
         notes.append(_("Périodes d'échantillonnage différentes selon les fichiers ({}) : lignes rangées par "
                        "date-heure, rien n'est rééchantillonné.").format(
                            ", ".join("{:g} ms".format(p * 1000) for p in sorted(periods))))
-    if normalized:
+    for s in sources:
+        if s.renamed:
+            notes.append(_("« {} » : voie(s) associée(s) par unité à celles de « {} » (le plus récent) : {}.")
+                         .format(s.path.name, sources[-1].path.name, ", ".join(s.renamed)))
+    if normalized and any(s.kind == "gbd" for s in sources):
         notes.append(_("Fichiers Graphtec .GBD décodés comme à l'import (mise à l'échelle de l'appareil comprise) "
                        "et écrits en CSV."))
+    if normalized:
         rewritten = [s.path.name for s in sources if s.kind == "csv"]
         if rewritten:
             notes.append(_("CSV relus comme à l'ouverture et réécrits au format des .GBD (« ; », point décimal) : "
@@ -184,6 +200,25 @@ def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], No
                        pd.Timestamp(int(kept_times.min())), pd.Timestamp(int(kept_times.max())), notes)
 
 
+def folder_files(folder) -> List[Path]:
+    """Fichiers d'un dossier à fusionner (retour client : « charger les dossiers directement ») :
+    CSV / TXT / DAT / TSV et .GBD du dossier (sans ses sous-dossiers), par ordre de nom ; un
+    fichier fusionné déjà écrit dans le dossier (nom en « _fusion ») est laissé de côté."""
+    folder = Path(folder)
+    if not folder.is_dir():
+        raise MergeError(_("Dossier introuvable : {}").format(folder))
+    files = []
+    for path in sorted(folder.iterdir(), key=lambda p: p.name.lower()):
+        if not path.is_file() or path.name.startswith(".") or "_fusion" in path.stem.lower():
+            continue
+        if path.suffix.lower() in (".csv", ".txt", ".dat", ".tsv", ".gbd"):
+            files.append(path)
+    if len(files) < 2:
+        raise MergeError(_("Le dossier « {} » contient {} fichier(s) CSV, TXT, DAT, TSV ou .GBD : il en faut au "
+                           "moins deux pour une fusion.").format(folder.name, len(files)))
+    return files
+
+
 def merge_summary(result: MergeResult) -> str:
     """Résumé pour le journal des traitements."""
     return _("Fusion chronologique de {} fichiers ({}) dans {} : {} lignes, du {} au {}.").format(
@@ -192,6 +227,91 @@ def merge_summary(result: MergeResult) -> str:
 
 
 # ---------------------------------------------------------------------------------------------
+
+def _read_all(paths: List[Path], normalized: bool, progress) -> List[_Source]:
+    sources = []
+    for i, path in enumerate(paths, start=1):
+        progress(_("Lecture du fichier {}/{} : {}…").format(i, len(paths), path.name))
+        sources.append(_read_source(path, normalized))
+    sources.sort(key=lambda s: s.times.min())  # ordre chronologique, quel que soit le choix
+    if normalized:
+        target = sources[-1]  # câblage actuel : celui du fichier le plus récent
+        names = list(target.channels)
+        for s in sources:
+            _apply_channels(s, _match_channels(s, target), names)
+    for other in sources[1:]:
+        _check_compatible(sources[0], other)
+    return sources
+
+
+def _is_graphtec_csv(path: Path) -> bool:
+    try:
+        with open(path, "rb") as fh:
+            return b"GRAPHTEC" in fh.read(4096).upper()
+    except OSError:
+        return False
+
+
+def _header(name: str, unit: str) -> str:
+    return "{} [{}]".format(name, unit) if unit else name
+
+
+def _match_channels(src: _Source, target: _Source) -> List[int]:
+    """Pour chaque voie de ``target``, l'indice de la voie de ``src`` qui lui correspond : même nom et
+    même unité, sinon même unité quand il n'y a qu'une possibilité (voie recâblée)."""
+    if src is target:
+        return list(range(len(src.channels)))
+    mapping = {}
+    left_src = list(range(len(src.channels)))
+    for j, ch in enumerate(target.channels):
+        if ch in src.channels:
+            i = src.channels.index(ch)
+            mapping[j] = i
+            left_src.remove(i)
+    left_target = [j for j in range(len(target.channels)) if j not in mapping]
+    if left_src or left_target:
+        units = {src.channels[i][1] for i in left_src} | {target.channels[j][1] for j in left_target}
+        missing, extra = [], []
+        for unit in sorted(units):
+            a = [i for i in left_src if src.channels[i][1] == unit]
+            b = [j for j in left_target if target.channels[j][1] == unit]
+            if len(a) == 1 and len(b) == 1:
+                mapping[b[0]] = a[0]
+                src.renamed.append("{} -> {}".format(_header(*src.channels[a[0]]), _header(*target.channels[b[0]])))
+            elif len(a) == len(b):  # plusieurs voies de même unité recâblées : laquelle va où ?
+                raise MergeError(_("« {} » et « {} » (le plus récent) : plusieurs voies en {} ont changé de numéro "
+                                   "({} d'un côté, {} de l'autre). Correspondance impossible à deviner : fusion "
+                                   "impossible.").format(src.path.name, target.path.name, unit or _("sans unité"),
+                                                         ", ".join(_header(*src.channels[i]) for i in a),
+                                                         ", ".join(_header(*target.channels[j]) for j in b)))
+            else:
+                extra += [_header(*src.channels[i]) for i in a]
+                missing += [_header(*target.channels[j]) for j in b]
+        if missing or extra:
+            detail = []
+            if missing:
+                detail.append(_("voie(s) absente(s) : {}").format(", ".join(missing)))
+            if extra:
+                detail.append(_("voie(s) en plus : {}").format(", ".join(extra)))
+            raise MergeError(_("« {} » n'a pas les mêmes voies que « {} » (le plus récent) ({}) : fusion impossible.")
+                             .format(src.path.name, target.path.name, " ; ".join(detail)))
+    return [mapping[j] for j in range(len(target.channels))]
+
+
+def _apply_channels(src: _Source, order: List[int], target_channels: List[tuple]) -> None:
+    """Écrit les lignes de ``src`` avec ses voies rangées et nommées comme le fichier le plus récent."""
+    frame = pd.DataFrame({"Date&Time": pd.to_datetime(src.times)})
+    for k, i in enumerate(order):
+        frame[k] = src.values[:, i]
+    text = frame.to_csv(sep=";", index=False, header=False, date_format="%Y-%m-%d %H:%M:%S.%f",
+                        float_format="%.10g", **{_TO_CSV_EOL: "\n"})
+    src.lines = text.split("\n")[:-1]
+    src.keys = src.lines
+    src.channels = target_channels
+    src.headers = ["Date&Time"] + [_header(*ch) for ch in target_channels]
+    src.preamble = [";".join(src.headers)]
+    src.date_example = src.lines[0].split(";")[0] if src.lines else ""
+
 
 def _read_source(path: Path, normalized: bool = False) -> _Source:
     if not path.is_file():
@@ -320,19 +440,13 @@ def _normalized_source(path: Path, kind: str, times: np.ndarray, values: pd.Data
     """Une ligne « date-heure;valeur;… » par mesure (« ; », point décimal), au format des .GBD décodés.
     Date-heure arrondie à la microseconde : un .GBD et son export CSV donnent les mêmes lignes."""
     times = (np.round(np.asarray(times, dtype=np.int64) / 1000.0) * 1000).astype(np.int64)
-    headers = ["Date&Time"] + ["{} [{}]".format(c, u) if u else c for c, u in zip(names, units)]
-    frame = pd.DataFrame({"Date&Time": pd.to_datetime(times)})
-    for i, name in enumerate(names):
-        frame[i] = np.asarray(values.iloc[:, i], dtype=float) + 0.0  # « -0.00 » du CSV -> 0, comme le .GBD
-    text = frame.to_csv(sep=";", index=False, header=False, date_format="%Y-%m-%d %H:%M:%S.%f",
-                        float_format="%.10g", **{_TO_CSV_EOL: "\n"})
-    lines = text.split("\n")[:-1]
+    matrix = np.column_stack([np.asarray(values.iloc[:, i], dtype=float) for i in range(len(names))]) + 0.0
+    # (« + 0.0 » : « -0.00 » du CSV -> 0, comme le .GBD) ; lignes écrites par _apply_channels
     backward = None
     if (np.diff(times) < 0).any():
         backward = pd.Timestamp(int(times[int(np.flatnonzero(np.diff(times) < 0)[0]) + 1]))
-    return _Source(path, "utf-8", False, "\r\n", ";", ".", headers, [";".join(headers)], lines, times, lines,
-                   "gbd", lines[0].split(";")[0] if lines else "", backward=backward, kind=kind,
-                   period=period, model=model)
+    return _Source(path, "utf-8", False, "\r\n", ";", ".", [], [], [], times, [], "gbd", "", backward=backward,
+                   kind=kind, period=period, model=model, values=matrix, channels=list(zip(names, units)))
 
 
 def _gbd_preamble(ref: _Source, sources: List[_Source]) -> List[str]:
@@ -362,7 +476,7 @@ def _check_compatible(ref: _Source, other: _Source) -> None:
             detail = _("voie(s) en plus : {}").format(", ".join(extra))
         else:
             detail = _("voies dans un autre ordre")
-        raise MergeError(_("« {} » n'a pas les mêmes colonnes que « {} » ({}) : fusion impossible.")
+        raise _ColumnsError(_("« {} » n'a pas les mêmes colonnes que « {} » ({}) : fusion impossible.")
                          .format(name, ref.path.name, detail))
     if other.date_shape != ref.date_shape:
         raise MergeError(_("« {} » n'a pas le même format de date que « {} » (« {} » au lieu de « {} ») : "

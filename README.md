@@ -111,9 +111,10 @@ Réglage **Base de temps** :
 
 ### Fusionner plusieurs fichiers (CSV ou Graphtec .GBD)
 
-**Fusionner…** (en haut) : un essai enregistré en plusieurs fichiers devient **un
-seul CSV trié par date-heure**, quel que soit l'ordre ou le nom des fichiers, puis il est ouvert
-comme un seul essai.
+**Fusionner ▾** (en haut) → **Des fichiers…** ou **Tout un dossier…** (tous les CSV, TXT, DAT,
+TSV et .GBD du dossier ; un ancien « …_fusion » est laissé de côté) : un essai enregistré en
+plusieurs fichiers devient **un seul CSV trié par date-heure**, quel que soit l'ordre ou le nom
+des fichiers, puis il est ouvert comme un seul essai.
 
 - Fichiers **compatibles** seulement : mêmes titres de colonnes, même séparateur, même décimale,
   même format de date (« 2026/9/21 » et « 2026/10/1 » sont bien le même format). Sinon la fusion
@@ -130,6 +131,10 @@ comme un seul essai.
   temps écoulé. **.GBD et CSV mélangés** : les CSV sont lus comme à l'ouverture et réécrits au même
   format (mêmes voies et unités exigées, valeurs inchangées) ; un .GBD et son propre export CSV
   donnent des lignes identiques, gardées une seule fois.
+- **Câblage changé** (Graphtec) : une voie qui a changé de numéro entre deux essais est retrouvée
+  par son unité quand il n'y a qu'une possibilité (ex. ancienne CH3 [A] -> CH1 [A], CH2 et CH6
+  inchangées). Les voies prennent les noms du fichier le plus récent et chaque correspondance est
+  signalée. Plusieurs voies de même unité changées : fusion refusée (impossible à deviner).
 - **Trous** entre fichiers et **changement d'heure** : signalés, rien n'est corrigé.
 - Exemple : `exemples/fusion/` (3 fichiers nanodac, un recouvrement de 5 min, un trou de 30 min).
 
