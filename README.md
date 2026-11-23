@@ -60,6 +60,9 @@ python main.py
    forcer le repos à 0 sous un seuil calculé sur les données, corriger un décalage de zéro. La
    fenêtre montre l'aperçu **avant** d'appliquer ; « Montrer les données brutes » affiche ensuite
    l'original en gris. Bouton **?** / **Aide** : explications détaillées.
+   **Valeur absolue |x| (zone affichée)…** : une partie de l'essai en négatif (ex. shunt branché à
+   l'envers) ? Zoomer dessus, cocher les voies : les points négatifs de la zone deviennent positifs
+   (données modifiées, exports compris, noté dans le journal, annulable avec « Annuler le nettoyage »).
 
    ![Fenêtre de nettoyage](docs/captures/4-fenetre-nettoyage.png)
 4. **Clic gauche** sur un point abîmé pour le corriger (interpolation avec ses voisins).
@@ -135,7 +138,9 @@ des fichiers, puis il est ouvert comme un seul essai.
   par son unité quand il n'y a qu'une possibilité (ex. ancienne CH3 [A] -> CH1 [A], CH2 et CH6
   inchangées). Les voies prennent les noms du fichier le plus récent et chaque correspondance est
   signalée. Plusieurs voies de même unité changées : fusion refusée (impossible à deviner).
-- **Trous** entre fichiers et **changement d'heure** : signalés, rien n'est corrigé.
+- **Trous** entre fichiers : l'appli demande s'il faut les **conserver** (date-heure réelle) ou les
+  **supprimer** (fichiers Graphtec mis bout à bout : date-heure des fichiers suivants avancée,
+  mesures inchangées, noté dans le journal). **Changement d'heure** : signalé, pas corrigé.
 - Exemple : `exemples/fusion/` (3 fichiers nanodac, un recouvrement de 5 min, un trou de 30 min).
 
 ## Formats reconnus

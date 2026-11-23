@@ -342,6 +342,46 @@ class Session:
             label, name, index + 1, when, old, value))
         return value
 
+    def make_absolute(self, keys: Sequence[Key], view: Optional[Tuple[float, float]] = None) -> Dict[Key, int]:
+        """Retour client (#19) : points négatifs des voies rendus positifs (valeur absolue |x|), sur la
+        période ``view`` de l'axe du graphique (minutes ou %) ou sur tout l'essai. Les données sont
+        modifiées (exports compris), journalisé, annulable avec « Annuler le nettoyage ».
+        Renvoie le nombre de points changés par voie."""
+        changed = {}
+        for key in keys:
+            if key in self.averages:
+                continue  # une moyenne se recalcule depuis ses voies
+            name, label = key
+            m = self.measurements[name]
+            x = m.data[TIME_COL].to_numpy(dtype=float)
+            if self.is_key_shifted(key) and not self.percent_axis:
+                x = x + self.time_offset_min
+            mask = np.ones(len(x), dtype=bool)
+            if self.window is not None:
+                mask &= (x >= self.window[0] - 1e-9) & (x <= self.window[1] + 1e-9)
+            if view is not None:
+                mask &= (x >= min(view)) & (x <= max(view))
+            y = m.data[label].to_numpy(dtype=float, copy=True)
+            negative = mask & (y < 0)
+            count = int(negative.sum())
+            changed[key] = count
+            if not mask.any():
+                continue
+            y[negative] = -y[negative]
+            m.data[label] = y
+            inside = np.flatnonzero(mask)
+            self.log(_("Valeur absolue |x| appliquée aux données : {} [{}], du {} au {} : {} point(s) négatif(s) "
+                       "rendu(s) positif(s).").format(label, name, self._moment(m, int(inside[0])),
+                                                      self._moment(m, int(inside[-1])), count))
+        self._refresh_averages()
+        return changed
+
+    @staticmethod
+    def _moment(m: Measurement, index: int) -> str:
+        if m.start is not None:
+            return (m.start + pd.Timedelta(minutes=float(m.elapsed_min[index]))).strftime("%d/%m/%Y %H:%M:%S")
+        return format_hms_safe(float(m.elapsed_min[index]))
+
     def set_value(self, key: Key, index: int, value: float) -> None:
         """Correction manuelle d'un point (US-05)."""
         name, label = key

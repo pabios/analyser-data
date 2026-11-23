@@ -358,7 +358,9 @@ channel name)."""),
 • Ligne identique dans deux fichiers : gardée une fois. Même date-heure avec des valeurs
   différentes : les deux gardées, avec un avertissement. Ligne corrompue isolée (date
   illisible) : retirée et signalée.
-• Trous entre fichiers et changement d'heure : signalés, rien n'est corrigé ni ajouté.
+• Trous entre fichiers : l'appli demande s'il faut les conserver (date-heure réelle) ou
+  les supprimer (fichiers Graphtec mis bout à bout : la date-heure des fichiers suivants
+  est avancée, les mesures ne changent pas). Changement d'heure : signalé, pas corrigé.
 Tout est noté dans le journal. Exemple : exemples/fusion (3 fichiers, un doublon de
 5 min, un trou de 30 min).""",
      "Merge", """\
@@ -381,8 +383,10 @@ a single file, sorted by date and time, then opened as one test.
   changed, the merge is refused.
 • Row identical in two files: kept once. Same date-time with different values: both
   kept, with a warning. Isolated corrupted row (unreadable date): removed and reported.
-• Gaps between files and daylight saving changes: reported, nothing is corrected or
-  added.
+• Gaps between files: the application asks whether to keep them (real date-time) or
+  remove them (Graphtec files put end to end: the date-time of the following files is
+  moved earlier, measurements unchanged). Daylight saving change: reported, not
+  corrected.
 Everything is recorded in the log. Example: exemples/fusion (3 files, a 5 min
 duplicate, a 30 min gap)."""),
 

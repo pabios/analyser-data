@@ -31,6 +31,9 @@ app_module.messagebox.showinfo = lambda *a, **k: dialogs.append(("info",) + a)
 app_module.messagebox.showwarning = lambda *a, **k: dialogs.append(("warning",) + a)
 app_module.messagebox.showerror = lambda *a, **k: dialogs.append(("error",) + a)
 app_module.filedialog.asksaveasfilename = lambda **k: str(OUT / "export.csv")
+answers = []  # réponses aux questions oui / non, dans l'ordre (vide : « oui »)
+app_module.messagebox.askyesno = lambda *a, **k: (dialogs.append(("question",) + a),
+                                                  answers.pop(0) if answers else True)[1]
 
 
 def pump(root, n=20):
@@ -634,6 +637,46 @@ def main():
     assert infos and "6 000 lignes" in infos[0][2] and "réécrits au format des .GBD" in infos[0][2], dialogs
     assert list(gui.session.measurements) == ["dossier_gbd_fusion.csv"], list(gui.session.measurements)
     shot(root, "44_fusion_dossier.png")
+
+    # Retour client : trous entre fichiers supprimés au choix (« Non » à « Conserver les trous ? »)
+    sys.path.insert(0, str(ROOT / "tests"))
+    from test_gbd import make_gbd  # noqa: E402
+    folder = OUT / "dossier_trous"
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir()
+    make_gbd(folder / "a.GBD", n=600, start="2026-10-28, 17:00:00")
+    make_gbd(folder / "b.GBD", n=600, start="2026-10-28, 18:00:00")
+    gui.session.clear()
+    gui._checked.clear()
+    dialogs.clear()
+    answers[:] = [False]
+    gui.merge_folder(str(folder), str(folder / "dossier_trous_fusion.csv"))
+    wait_idle(root, gui)
+    wait_idle(root, gui)  # nouvelle fusion, sans les trous
+    wait_idle(root, gui)
+    questions = [d for d in dialogs if d[0] == "question"]
+    assert questions and "Conserver les trous" in questions[0][2] and "Trou de" in questions[0][2], dialogs
+    infos = [d for d in dialogs if d[0] == "info" and d[1] == "Fusion terminée"]
+    assert infos and "supprimé" in infos[-1][2], dialogs
+    fm = gui.session.measurements["dossier_trous_fusion.csv"]
+    assert len(fm.data) == 1200 and fm.duration_min < 2.1, fm.duration_min
+    shot(root, "45_fusion_sans_trous.png")
+
+    # Retour client : partie en négatif -> valeur absolue sur la zone affichée
+    key = next(k for k in gui.session.all_keys() if k[1] == "Channel 2")
+    for k in list(gui._checked):
+        gui._checked[k] = k == key
+    gui.redraw()
+    pump(root)
+    gui.plot._main_ax.set_xlim(0.0, 0.5)  # zoom sur les 30 premières secondes
+    dialogs.clear()
+    gui.make_absolute()
+    pump(root)
+    assert any(d[0] == "question" and "Rendre positifs" in d[2] for d in dialogs), dialogs
+    y = fm.data["Channel 2"].to_numpy()
+    assert (y[:300] >= 0).all() and (y[400:] < 0).any()
+    assert any("Valeur absolue |x| appliquée" in text for _t, text in gui.session.journal)
+    shot(root, "46_valeur_absolue.png")
     print("fusion chronologique : OK")
 
     help_window = app_module.HelpWindow.open(root, "Nettoyage")

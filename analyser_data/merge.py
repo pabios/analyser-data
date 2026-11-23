@@ -28,7 +28,11 @@ Règles validées par le client (commentaire de l'issue #19) :
 * **câblage changé** entre deux essais (retour client : l'ancienne voie 3 est devenue la voie 1) :
   au format des .GBD (et pour des CSV Graphtec seuls), les voies de même nom et même unité restent
   liées, les autres sont associées par unité quand il n'y a qu'une possibilité ; les voies prennent
-  les noms du fichier le plus récent et chaque renommage est signalé. Ambigu : fusion bloquée.
+  les noms du fichier le plus récent et chaque renommage est signalé. Ambigu : fusion bloquée ;
+* **trous** entre fichiers : conservés par défaut ; au choix (``close_gaps``, fichiers Graphtec),
+  supprimés en mettant les fichiers bout à bout : la date-heure des fichiers suivants est avancée
+  de la durée du trou (une période d'échantillonnage entre deux fichiers), les mesures ne changent
+  pas, et chaque décalage est signalé.
 """
 from __future__ import annotations
 
@@ -36,7 +40,7 @@ import csv
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -98,10 +102,16 @@ class MergeResult:
     start: pd.Timestamp
     end: pd.Timestamp
     notes: List[str]
+    gaps: int = 0  # trous trouvés entre fichiers
+    gap_notes: List[str] = field(default_factory=list)  # leurs remarques (durée, fichiers)
+    gaps_closed: bool = False  # trous supprimés (fichiers mis bout à bout)
+    can_close_gaps: bool = False  # suppression possible (fichiers Graphtec : date-heure réécrite)
 
 
-def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], None]] = None) -> MergeResult:
-    """Fusionne ``paths`` dans ``out_path`` (voir les règles en tête de module)."""
+def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], None]] = None,
+                close_gaps: bool = False) -> MergeResult:
+    """Fusionne ``paths`` dans ``out_path`` (voir les règles en tête de module). ``close_gaps`` :
+    trous entre fichiers supprimés (fichiers mis bout à bout), fichiers Graphtec seulement."""
     progress = progress or (lambda _text: None)
     paths = [Path(p) for p in paths]
     out_path = Path(out_path)
@@ -117,13 +127,20 @@ def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], No
         if not path.is_file():
             raise MergeError(_("Fichier introuvable : {}").format(path))
     normalized = any(is_gbd(p) for p in paths)  # un .GBD : tout au format des .GBD
+    graphtec = all(is_gbd(p) or _is_graphtec_csv(p) for p in paths)
+    if close_gaps and not graphtec:
+        raise MergeError(_("Supprimer les trous n'est possible que pour des fichiers Graphtec (CSV ou .GBD) : "
+                           "pour les autres, les lignes sont recopiées telles quelles, date-heure comprise."))
+    if close_gaps:
+        normalized = True  # date-heure réécrite : format des .GBD
+    gap_notes: List[str] = []
     try:
-        sources = _read_all(paths, normalized, progress)
+        sources = _read_all(paths, normalized, progress, close_gaps, gap_notes)
     except _ColumnsError:
-        if normalized or not all(_is_graphtec_csv(p) for p in paths):
+        if normalized or not graphtec:
             raise
         normalized = True  # CSV Graphtec dont les voies ont changé de numéro : correspondance des voies
-        sources = _read_all(paths, normalized, progress)
+        sources = _read_all(paths, normalized, progress, close_gaps, gap_notes)
     ref = sources[0]
     if normalized:
         ref.preamble = _gbd_preamble(ref, sources)
@@ -149,7 +166,11 @@ def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], No
         notes.append(_("{} ligne(s) ont la même date-heure qu'une autre mais des valeurs différentes : toutes "
                        "gardées, dans l'ordre des fichiers (premier instant : {}).").format(
                            _thousands(int(same_time.sum())), _stamp(first)))
-    notes += _between_files(sources)
+    notes += gap_notes
+    between, found = _between_files(sources)
+    notes += between
+    if not close_gaps:
+        gap_notes = found
     for s in sources:
         if s.backward is not None:
             notes.append(_("« {} » : l'heure recule à {} (changement d'heure ?). Rien n'est corrigé : les lignes "
@@ -197,7 +218,9 @@ def merge_files(paths: Sequence, out_path, progress: Optional[Callable[[str], No
         notes.append(_("Caractères impossibles à écrire en {} : fichier fusionné écrit en UTF-8.").format(encoding))
     out_path.write_bytes(data)
     return MergeResult(out_path, [s.path for s in sources], len(kept), duplicates,
-                       pd.Timestamp(int(kept_times.min())), pd.Timestamp(int(kept_times.max())), notes)
+                       pd.Timestamp(int(kept_times.min())), pd.Timestamp(int(kept_times.max())), notes,
+                       gaps=len(gap_notes), gap_notes=gap_notes, gaps_closed=close_gaps and bool(gap_notes),
+                       can_close_gaps=graphtec)
 
 
 def folder_files(folder) -> List[Path]:
@@ -228,12 +251,15 @@ def merge_summary(result: MergeResult) -> str:
 
 # ---------------------------------------------------------------------------------------------
 
-def _read_all(paths: List[Path], normalized: bool, progress) -> List[_Source]:
+def _read_all(paths: List[Path], normalized: bool, progress, close_gaps: bool = False,
+              gap_notes: Optional[List[str]] = None) -> List[_Source]:
     sources = []
     for i, path in enumerate(paths, start=1):
         progress(_("Lecture du fichier {}/{} : {}…").format(i, len(paths), path.name))
         sources.append(_read_source(path, normalized))
     sources.sort(key=lambda s: s.times.min())  # ordre chronologique, quel que soit le choix
+    if close_gaps:
+        _close_gaps(sources, gap_notes if gap_notes is not None else [])
     if normalized:
         target = sources[-1]  # câblage actuel : celui du fichier le plus récent
         names = list(target.channels)
@@ -242,6 +268,32 @@ def _read_all(paths: List[Path], normalized: bool, progress) -> List[_Source]:
     for other in sources[1:]:
         _check_compatible(sources[0], other)
     return sources
+
+
+def _period_ns(src: _Source) -> float:
+    steps = np.diff(np.sort(src.times))
+    steps = steps[steps > 0]
+    return float(np.median(steps)) if len(steps) else (src.period or 0.0) * 1e9
+
+
+def _close_gaps(sources: List[_Source], notes: List[str]) -> None:
+    """Fichiers mis bout à bout : après un trou (plus de deux périodes sans mesure), le fichier
+    suivant et tous ceux d'après sont avancés pour commencer une période après la fin du précédent."""
+    shift = 0
+    end = int(sources[0].times.max())
+    for prev, nxt in zip(sources, sources[1:]):
+        if shift:
+            nxt.times = nxt.times - shift
+        period = _period_ns(prev)
+        gap = int(nxt.times.min()) - end
+        if period > 0 and gap > 2 * period:
+            delta = int(round(gap - period))
+            nxt.times = nxt.times - delta
+            shift += delta
+            notes.append(_("Trou de {} supprimé entre « {} » et « {} » : date-heure de « {} » et des fichiers "
+                           "suivants avancée de {} (mesures inchangées).").format(
+                               _hms(delta / 1e9), prev.path.name, nxt.path.name, nxt.path.name, _hms(delta / 1e9)))
+        end = max(end, int(nxt.times.max()))
 
 
 def _is_graphtec_csv(path: Path) -> bool:
@@ -483,8 +535,9 @@ def _check_compatible(ref: _Source, other: _Source) -> None:
                            "fusion impossible.").format(name, ref.path.name, other.date_example, ref.date_example))
 
 
-def _between_files(sources: List[_Source]) -> List[str]:
-    notes = []
+def _between_files(sources: List[_Source]) -> Tuple[List[str], List[str]]:
+    """Chevauchements et trous entre fichiers successifs : toutes les remarques, et celles des trous."""
+    notes, gaps = [], []
     for prev, nxt in zip(sources, sources[1:]):
         end, start = int(prev.times.max()), int(nxt.times.min())
         steps = np.diff(np.sort(prev.times))
@@ -502,10 +555,11 @@ def _between_files(sources: List[_Source]) -> List[str]:
                 notes.append(_("« {} » reprend la fin de « {} » ({}) avec les mêmes lignes : gardées une seule fois.")
                              .format(nxt.path.name, prev.path.name, _hms((end - start) / 1e9)))
         elif period > 0 and gap > 2 * period / 1e9:
-            notes.append(_("Trou de {} entre « {} » (fin {}) et « {} » (début {}) : conservé, aucune valeur "
-                           "ajoutée.").format(_hms(gap), prev.path.name, _stamp(pd.Timestamp(end)), nxt.path.name,
-                                              _stamp(pd.Timestamp(start))))
-    return notes
+            gaps.append(_("Trou de {} entre « {} » (fin {}) et « {} » (début {}) : conservé, aucune valeur "
+                          "ajoutée.").format(_hms(gap), prev.path.name, _stamp(pd.Timestamp(end)), nxt.path.name,
+                                             _stamp(pd.Timestamp(start))))
+            notes.append(gaps[-1])
+    return notes, gaps
 
 
 def _stamp(moment: pd.Timestamp) -> str:

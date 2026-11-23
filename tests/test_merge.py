@@ -515,3 +515,47 @@ def test_folder_with_less_than_two_files(tmp_path):
         folder_files(tmp_path)
     with pytest.raises(MergeError, match="introuvable"):
         folder_files(tmp_path / "absent")
+
+
+# --- Trous : conservés ou supprimés au choix (retour client sur #19) ---------------------------
+
+def test_gaps_kept_by_default_and_counted(tmp_path):
+    make_gbd(tmp_path / "a.GBD", n=300, start="2026-10-29, 09:46:10")
+    make_gbd(tmp_path / "b.GBD", n=300, start="2026-10-29, 10:30:00")
+    result = merge_files([tmp_path / "a.GBD", tmp_path / "b.GBD"], tmp_path / "f.csv")
+    assert result.gaps == 1 and not result.gaps_closed and result.can_close_gaps
+    assert "Trou de" in result.gap_notes[0] and result.end == pd.Timestamp("2026-10-29 10:30:29.900")
+
+
+def test_gaps_closed_files_end_to_end(tmp_path):
+    a = make_gbd(tmp_path / "a.GBD", n=300, start="2026-10-29, 09:46:10")
+    b = make_gbd(tmp_path / "b.GBD", n=300, start="2026-10-29, 10:30:00")
+    c = make_gbd(tmp_path / "c.GBD", n=300, start="2026-10-29, 12:00:00")
+    out = tmp_path / "f.csv"
+    result = merge_files([tmp_path / "c.GBD", tmp_path / "a.GBD", tmp_path / "b.GBD"], out, close_gaps=True)
+    assert result.gaps == 2 and result.gaps_closed and result.rows == 900
+    assert result.start == pd.Timestamp("2026-10-29 09:46:10")
+    assert result.end == pd.Timestamp("2026-10-29 09:47:39.900")  # 900 points à 100 ms, sans trou
+    assert sum("supprimé" in n for n in result.notes) == 2
+    assert not any("conservé" in n for n in result.notes)
+    m = load_measurement(out)
+    assert len(m.data) == 900 and m.period_s == pytest.approx(0.1)
+    assert m.duration_min == pytest.approx(899 * 0.1 / 60)
+    np.testing.assert_allclose(m.data["Channel 1"].to_numpy(), np.concatenate([a[0], b[0], c[0]]), atol=1e-9)
+
+
+def test_gaps_closed_for_graphtec_csv_too(tmp_path):
+    graphtec(tmp_path / "a.CSV", "2026-10-23 08:00:00", 50)
+    graphtec(tmp_path / "b.CSV", "2026-10-23 09:00:00", 50)
+    result = merge_files([tmp_path / "a.CSV", tmp_path / "b.CSV"], tmp_path / "f.csv", close_gaps=True)
+    assert result.gaps == 1 and result.rows == 100
+    assert result.end == pd.Timestamp("2026-10-23 08:00:09.900")
+
+
+def test_close_gaps_refused_for_other_files(tmp_path):
+    nanodac(tmp_path / "a.txt", "2026-11-20 08:00:00", 30)
+    nanodac(tmp_path / "b.txt", "2026-11-20 10:00:00", 30)
+    result = merge_files([tmp_path / "a.txt", tmp_path / "b.txt"], tmp_path / "f.txt")
+    assert result.gaps == 1 and not result.can_close_gaps  # l'appli ne propose pas la suppression
+    with pytest.raises(MergeError, match="Graphtec"):
+        merge_files([tmp_path / "a.txt", tmp_path / "b.txt"], tmp_path / "g.txt", close_gaps=True)

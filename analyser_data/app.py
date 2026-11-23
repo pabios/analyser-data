@@ -40,7 +40,7 @@ from .cycles_dialog import CyclesDialog
 from .loader import write_anonymized_extract, write_extract
 from .merge import MergeError, folder_files, merge_files, merge_summary
 from .report import build_report, save_figure_image
-from .session import is_clim_file, journal_path, legend_label
+from .session import format_hms_safe, is_clim_file, journal_path, legend_label
 from .plotting import PlotManager, PlotSettings, format_hms
 from .session import (EXPORT_STEPS, TEMPERATURE_OFFSET_RANGE, TEMPERATURE_OFFSET_STEP, TIME_MODES, Session,
                       format_offset, parse_temperature_offset)
@@ -262,6 +262,10 @@ class AnalyserDataApp:
             button = ttk.Button(row, text=text, command=command, style=style)
             button.pack(side=tk.LEFT, padx=(0, 6))
             self._action_buttons.append(button)
+        # Retour client (#19) : partie d'un essai en négatif -> valeur absolue des données
+        button = ttk.Button(clean, text=_("Valeur absolue |x| (zone affichée)…"), command=self.make_absolute)
+        button.pack(anchor=tk.W, pady=(6, 0))
+        self._action_buttons.append(button)
 
         # --- Issue #12 : essai plus long (cycles dupliqués / retirés)
         outer, cyc = card(side, _("Cycles"), _("Essai plus long : dupliquer ou retirer des cycles entiers."),
@@ -472,7 +476,8 @@ class AnalyserDataApp:
         self._last_dir = str(folder)
         self.merge_files(paths, target, default_name="{}_fusion.csv".format(Path(folder).name))
 
-    def merge_files(self, paths: List[str] = None, target: str = None, default_name: str = None) -> None:
+    def merge_files(self, paths: List[str] = None, target: str = None, default_name: str = None,
+                    close_gaps: bool = False) -> None:
         """Issue #19 : plusieurs CSV (ou .GBD Graphtec) fusionnés en un seul fichier trié par date-heure, puis ouvert
         comme un seul essai. ``paths`` / ``target`` : pour les scripts (sans boîte de dialogue)."""
         if self.busy:
@@ -497,9 +502,11 @@ class AnalyserDataApp:
         if not target:
             return
 
+        self._merge_args = (list(paths), target)
+
         def work(progress):
             try:
-                return merge_files(paths, target, progress)
+                return merge_files(paths, target, progress, close_gaps=close_gaps)
             except MergeError as exc:  # fichier incompatible : message clair, pas de rapport d'erreur
                 return exc
 
@@ -510,6 +517,17 @@ class AnalyserDataApp:
         if isinstance(result, MergeError):
             messagebox.showerror(_("Fusion impossible"), str(result) + _("\n\nAucun fichier n'a été écrit."),
                                  parent=self.root)
+            return
+        if result.gaps and not result.gaps_closed and result.can_close_gaps and not messagebox.askyesno(
+                _("Trous entre les fichiers"),
+                _("{} trou(s) entre les fichiers (enregistreur arrêté) :\n\n{}\n\nConserver les trous ?\n\n"
+                  "• Oui : date-heure réelle, les trous restent visibles.\n"
+                  "• Non : fichiers mis bout à bout, sans trou ; la date-heure des fichiers suivants est avancée "
+                  "(mesures inchangées, noté dans le journal).").format(
+                      result.gaps, "\n".join("• " + n for n in result.gap_notes)),
+                parent=self.root):
+            paths, target = self._merge_args
+            self.merge_files(paths, target, close_gaps=True)
             return
         self.session.log(merge_summary(result))
         for note in result.notes:
@@ -710,6 +728,32 @@ class AnalyserDataApp:
         self.lbl_cycles.configure(text="\n".join(lines) or _("Aucun cycle ajouté."),
                                   foreground=C["fg"] if lines else C["muted_fg"])
         self.btn_undo_cycles.state(["!disabled"] if self.session.can_undo_cycles() else ["disabled"])
+
+    def make_absolute(self, confirm: bool = True) -> None:
+        """Points négatifs des voies cochées rendus positifs, sur la zone affichée (zoom)."""
+        keys = [k for k in self.selected_keys() if not self.session.is_average(k)]
+        if self.busy:
+            return
+        if not keys:
+            messagebox.showinfo(_("Valeur absolue"), _("Cochez au moins une voie."), parent=self.root)
+            return
+        view = self.plot.current_view()
+        zone = (_("de {} à {}").format(format_hms_safe(min(view)), format_hms_safe(max(view)))
+                if view is not None and not self.session.percent_axis else _("zone affichée"))
+        if confirm and not messagebox.askyesno(
+                _("Valeur absolue"),
+                _("Rendre positifs les points négatifs de {} voie(s) cochée(s), sur la zone affichée ({}) ?\n\n"
+                  "Les données sont modifiées (graphique, exports, rapport) et c'est noté dans le journal. "
+                  "Zoomez d'abord sur la partie à corriger. Pour revenir en arrière : « Annuler le nettoyage ».")
+                .format(len(keys), zone), parent=self.root):
+            return
+        changed = self.session.make_absolute(keys, view)
+        self.redraw_keep_view()
+        self._set_status(_("Valeur absolue appliquée : {} point(s) négatif(s) rendu(s) positif(s) sur {} voie(s).")
+                         .format(sum(changed.values()), len(changed)))
+
+    def redraw_keep_view(self) -> None:
+        self._redraw_with_view(self.plot.current_view())
 
     def restore_selected(self) -> None:
         keys = self.selected_keys()
