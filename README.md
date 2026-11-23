@@ -109,18 +109,25 @@ Réglage **Base de temps** :
 
 **Langue** : français ou anglais, au choix dans la liste « FR / EN » en haut à droite (mémorisé).
 
-### Fusionner plusieurs fichiers CSV
+### Fusionner plusieurs fichiers (CSV ou Graphtec .GBD)
 
 **Fusionner…** (en haut) : un essai enregistré en plusieurs fichiers devient **un
 seul CSV trié par date-heure**, quel que soit l'ordre ou le nom des fichiers, puis il est ouvert
 comme un seul essai.
 
 - Fichiers **compatibles** seulement : mêmes titres de colonnes, même séparateur, même décimale,
-  même format de date. Sinon la fusion est **bloquée** et le message nomme le fichier en cause.
+  même format de date (« 2026/9/21 » et « 2026/10/1 » sont bien le même format). Sinon la fusion
+  est **bloquée** et le message nomme le fichier en cause.
 - Lignes de mesure **recopiées telles quelles** ; en haut, l'en-tête du fichier le plus ancien et
   une seule ligne de titres ; encodage et fins de ligne d'origine.
 - Ligne **identique** dans deux fichiers : gardée une fois. **Même date-heure, valeurs
   différentes** : les deux gardées, avec un avertissement.
+- Ligne **corrompue** isolée (date-heure illisible, ex. « USBCS°Œ » écrit par l'appareil) :
+  retirée et signalée (fichier, numéro de ligne, contenu). Trop de lignes illisibles : fusion bloquée.
+- **Fichiers .GBD Graphtec** : décodés comme à l'import (mise à l'échelle de l'appareil comprise),
+  la date-heure vient de l'heure de début enregistrée dans le fichier. Résultat : un CSV (« ; »,
+  point décimal) qui se relit comme un export Graphtec. On fusionne soit des .GBD, soit des CSV,
+  pas les deux ensemble. Utile quand l'export CSV ne donne que le temps écoulé.
 - **Trous** entre fichiers et **changement d'heure** : signalés, rien n'est corrigé.
 - Exemple : `exemples/fusion/` (3 fichiers nanodac, un recouvrement de 5 min, un trou de 30 min).
 

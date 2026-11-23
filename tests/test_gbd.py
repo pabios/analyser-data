@@ -11,13 +11,13 @@ from analyser_data.loader import TIME_COL, load_measurement
 HEADER_SIZE = 8192
 
 
-def make_gbd(path, n=600, sample="100ms", counts=None, amp=None):
+def make_gbd(path, n=600, sample="100ms", counts=None, amp=None, start="2026-10-29, 09:46:10"):
     order = ["CH1", "CH2", "CH3", "Alarm", "AlOut", "Pulse1"]
     amp = amp or {"CH1": "DC, 20V, Off", "CH2": "DC, 200mV, Off", "CH3": "TEMP, TC_K, Off"}
     lines = ["$Common", "ID         = 261D1118", "Volume     = 1, 1", "HeaderSiz  = {}".format(HEADER_SIZE),
              "Model      = GL860", "$$Data", "Counts     = {}".format(n if counts is None else counts),
              "Order      = " + ", ".join(order), "Sample     = {}".format(sample), "TempUnit   = ﾟC",
-             "$$Time", "Start      = 2026-10-29, 09:46:10", "Trigger    = 2026-10-29, 09:46:10",
+             "$$Time", "Start      = {}".format(start), "Trigger    = {}".format(start),
              "$Amp"] + ["{} = {}".format(k, v) for k, v in amp.items()] + ["$EndHeader"]
     header = "\r\n".join(lines).encode("shift_jis")
     header += b"\x00" * (HEADER_SIZE - len(header))

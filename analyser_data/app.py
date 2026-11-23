@@ -450,7 +450,7 @@ class AnalyserDataApp:
             self._report_unreadable(path, message)
 
     def merge_files(self, paths: List[str] = None, target: str = None) -> None:
-        """Issue #19 : plusieurs CSV fusionnés en un seul fichier trié par date-heure, puis ouvert
+        """Issue #19 : plusieurs CSV (ou .GBD Graphtec) fusionnés en un seul fichier trié par date-heure, puis ouvert
         comme un seul essai. ``paths`` / ``target`` : pour les scripts (sans boîte de dialogue)."""
         if self.busy:
             return
@@ -466,7 +466,7 @@ class AnalyserDataApp:
         first = Path(paths[0])
         self._last_dir = str(first.parent)
         if target is None:
-            suffix = first.suffix or ".csv"
+            suffix = ".csv" if first.suffix.lower() in ("", ".gbd") else first.suffix  # .GBD -> CSV
             target = filedialog.asksaveasfilename(
                 parent=self.root, title=_("Enregistrer le fichier fusionné"), initialdir=str(first.parent),
                 initialfile=_("{}_fusion{}").format(first.stem, suffix), defaultextension=suffix,

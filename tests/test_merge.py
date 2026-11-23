@@ -6,8 +6,10 @@ import pandas as pd
 import pytest
 
 from analyser_data.loader import load_measurement
-from analyser_data.merge import MergeError, merge_files, merge_summary
+from analyser_data.merge import MergeError, date_shape, merge_files, merge_summary
 from analyser_data.session import Session
+
+from test_gbd import make_gbd
 
 NANODAC_HEAD = ("Date/Heure\tChannel 1       (ENAN1);Group 1;M401-T120;°C\t"
                 "Channel 2       (ENAN2);Group 1;M402-H120;%HR")
@@ -178,22 +180,70 @@ def test_other_separator_blocks_the_merge(tmp_path):
         merge_files([tmp_path / "a.txt", tmp_path / "b.txt"], tmp_path / "f.txt")
 
 
-def test_unreadable_date_blocks_the_merge_with_line_number(tmp_path):
+def test_corrupted_line_is_removed_and_reported(tmp_path):
+    """Retour client (#19) : une ligne « USBCS°Œ » au milieu d'un CSV Graphtec bloquait toute la fusion."""
+    _lines, a = graphtec(tmp_path / "a.CSV", "2026-10-23 08:00:00", 50)
+    lines, rows = graphtec(tmp_path / "b.CSV", "2026-10-23 08:00:10", 50)
+    rows[20] = "USBCS°Œ,ÿÿ,Ÿ"
+    (tmp_path / "b.CSV").write_bytes(("\r\n".join(lines + rows) + "\r\n").encode("cp1252"))
+    out = tmp_path / "f.CSV"
+    result = merge_files([tmp_path / "a.CSV", tmp_path / "b.CSV"], out)
+    assert result.rows == 99
+    assert not any("USBCS" in line for line in read_lines(out))
+    note = next(n for n in result.notes if "corrompue" in n)
+    assert "« b.CSV » : 1 ligne(s)" in note and "ligne {}".format(len(lines) + 21) in note and "USBCS" in note
+    m = load_measurement(out)
+    assert len(m.data) == 99
+
+
+def test_many_unreadable_dates_still_block_the_merge_with_line_number(tmp_path):
+    """Beaucoup de dates illisibles : format mal compris, pas une ligne abîmée -> rien n'est écrit."""
     nanodac(tmp_path / "a.txt", "2026-11-20 08:00:00", 30)
-    rows = nanodac(tmp_path / "b.txt", "2026-11-20 09:00:00", 30)
-    rows[4] = "pas une date\t21,0\t50,0"
+    rows = nanodac(tmp_path / "b.txt", "2026-11-20 09:00:00", 400)
+    for k in range(4, 400, 16):  # 25 lignes illisibles sur 400
+        rows[k] = "pas une date\t21,0\t50,0"
     (tmp_path / "b.txt").write_bytes(("\r\n".join([NANODAC_HEAD] + rows) + "\r\n").encode("cp1252"))
     with pytest.raises(MergeError) as err:
         merge_files([tmp_path / "a.txt", tmp_path / "b.txt"], tmp_path / "f.txt")
     assert "« b.txt », ligne 6" in str(err.value) and "date-heure illisible" in str(err.value)
+    assert not (tmp_path / "f.txt").exists()
+
+
+def test_graphtec_dates_without_leading_zeros_have_the_same_format(tmp_path):
+    """Retour client (#19) : « 2026/10/1 09:21:19 » refusé face à « 2026/9/21 16:47:49 »."""
+    def write(name, start, n=20):
+        t0 = pd.Timestamp(start)
+        head = ["Vendor,GRAPHTEC Corporation", "Model,GL980", "Data", "No.,Date&Time,ms,CH1", "NO.,Time,ms,V"]
+        rows = []
+        for j in range(n):
+            t = t0 + pd.Timedelta(seconds=j)
+            rows.append("{},{}/{}/{} {:02d}:{:02d}:{:02d},0,+1.000".format(j + 1, t.year, t.month, t.day, t.hour,
+                                                                           t.minute, t.second))
+        (tmp_path / name).write_bytes(("\r\n".join(head + rows) + "\r\n").encode("cp1252"))
+    write("Mes-_260921-164742.CSV", "2026-09-21 16:47:49")
+    write("Mes-_261001-092111.CSV", "2026-10-01 09:21:19")
+    write("Mes-_261016-125639.CSV", "2026-10-16 12:56:42")
+    out = tmp_path / "f.CSV"
+    result = merge_files(sorted(tmp_path.glob("Mes-*.CSV")), out)
+    assert result.rows == 60
+    assert result.start == pd.Timestamp("2026-09-21 16:47:49")
+    assert result.end == pd.Timestamp("2026-10-16 12:57:01")
+
+
+def test_date_shape_ignores_missing_leading_zeros_but_not_field_order():
+    assert date_shape("2026/9/21 16:47:49 0") == date_shape("2026/10/1 09:21:19 0")
+    assert date_shape("21/09/26 16:47:49") == date_shape("1/9/26 6:47:49")
+    assert date_shape("2026/9/21 16:47:49") != date_shape("21/9/2026 16:47:49")
+    assert date_shape("2026-09-21 16:47:49") != date_shape("2026/09/21 16:47:49")
 
 
 def test_elapsed_time_only_cannot_be_ordered(tmp_path):
     for name, first in (("a.csv", 0), ("b.csv", 1000)):
         lines = ["Temps;U (V)"] + ["{};{}".format(first + i * 100, "1,5") for i in range(30)]
         (tmp_path / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
-    with pytest.raises(MergeError, match="temps écoulé seulement"):
+    with pytest.raises(MergeError, match="temps écoulé seulement") as err:
         merge_files([tmp_path / "a.csv", tmp_path / "b.csv"], tmp_path / "f.csv")
+    assert ".GBD" in str(err.value)  # piste donnée au client : les .GBD ont l'heure de début
 
 
 def test_clock_going_back_is_reported_not_corrected(tmp_path):
@@ -267,3 +317,62 @@ def test_merged_file_opens_as_one_measurement_in_session(tmp_path):
     assert np.all(np.diff(m.elapsed_min) > 0)
     assert any("Fusion chronologique de 2 fichiers (a.txt, b.txt) dans fusion.txt : 60 lignes" in text
                for _t, text in s.journal)
+
+
+# --- Fichiers natifs Graphtec .GBD (retour client sur #19) ---------------------------------------
+
+def test_gbd_files_are_merged_in_chronological_order(tmp_path):
+    a = make_gbd(tmp_path / "261029-094610.GBD", n=300, start="2026-10-29, 09:46:10")
+    b = make_gbd(tmp_path / "261029-095110.GBD", n=300, start="2026-10-29, 09:46:40")  # juste après a
+    out = tmp_path / "fusion.csv"
+    result = merge_files([tmp_path / "261029-095110.GBD", tmp_path / "261029-094610.GBD"], out)
+    assert [p.name for p in result.files] == ["261029-094610.GBD", "261029-095110.GBD"]
+    assert result.rows == 600 and result.duplicates == 0
+    assert result.start == pd.Timestamp("2026-10-29 09:46:10")
+    assert result.end == pd.Timestamp("2026-10-29 09:47:09.900")
+    assert any(".GBD" in n and "mise à l'échelle" in n for n in result.notes)
+    assert not any("Trou" in n for n in result.notes)
+
+    m = load_measurement(out)  # relu comme un export Graphtec : mêmes voies, unités, valeurs
+    assert m.source == "Graphtec"
+    assert [c.label for c in m.channels] == ["Channel 1", "Channel 2", "Channel 3"]
+    assert [c.unit for c in m.channels] == ["V", "mV", "°C"]
+    assert len(m.data) == 600 and m.period_s == pytest.approx(0.1)
+    assert m.start == pd.Timestamp("2026-10-29 09:46:10")
+    np.testing.assert_allclose(m.data["Channel 1"].to_numpy(), np.concatenate([a[0], b[0]]), atol=1e-9)
+    np.testing.assert_allclose(m.data["Channel 2"].to_numpy(), np.concatenate([a[1], b[1]]), atol=1e-9)
+    assert np.isnan(m.data["Channel 3"].to_numpy()[[10, 310]]).all()  # hors échelle resté vide
+
+
+def test_gbd_overlap_and_gap_reported(tmp_path):
+    make_gbd(tmp_path / "a.GBD", n=300, start="2026-10-29, 09:46:10")
+    make_gbd(tmp_path / "b.GBD", n=300, start="2026-10-29, 09:46:10")  # même essai copié deux fois
+    make_gbd(tmp_path / "c.GBD", n=300, start="2026-10-29, 10:30:00")  # 43 min plus tard
+    result = merge_files([tmp_path / "c.GBD", tmp_path / "b.GBD", tmp_path / "a.GBD"], tmp_path / "f.csv")
+    assert result.duplicates == 300 and result.rows == 600
+    assert any("Trou" in n for n in result.notes)
+
+
+def test_gbd_with_other_channels_or_units_blocks(tmp_path):
+    make_gbd(tmp_path / "a.GBD", n=100)
+    make_gbd(tmp_path / "b.GBD", n=100, start="2026-10-29, 10:00:00",
+             amp={"CH1": "DC, 20V, Off", "CH2": "DC, 20V, Off", "CH3": "TEMP, TC_K, Off"})
+    with pytest.raises(MergeError, match="b.GBD.*mêmes colonnes"):
+        merge_files([tmp_path / "a.GBD", tmp_path / "b.GBD"], tmp_path / "f.csv")
+    assert not (tmp_path / "f.csv").exists()
+
+
+def test_gbd_and_csv_are_not_mixed(tmp_path):
+    make_gbd(tmp_path / "a.GBD", n=100)
+    graphtec(tmp_path / "b.CSV", "2026-10-29 10:00:00", 50)
+    with pytest.raises(MergeError, match="a.GBD.*Graphtec .GBD.*b.CSV"):
+        merge_files([tmp_path / "a.GBD", tmp_path / "b.CSV"], tmp_path / "f.csv")
+
+
+def test_gbd_different_sampling_reported(tmp_path):
+    make_gbd(tmp_path / "a.GBD", n=100, sample="100ms")
+    make_gbd(tmp_path / "b.GBD", n=100, sample="1s", start="2026-10-29, 10:00:00")
+    result = merge_files([tmp_path / "a.GBD", tmp_path / "b.GBD"], tmp_path / "f.csv")
+    assert result.rows == 200
+    assert any("Périodes d'échantillonnage différentes" in n and "100 ms" in n and "1000 ms" in n
+               for n in result.notes)
