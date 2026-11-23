@@ -313,6 +313,29 @@ def pressure():
     (CLIM / "nanodac_T_P.txt").write_bytes(("\r\n".join(lines) + "\r\n").encode("cp1252"))
 
 
+def merge_parts():
+    """Fusion chronologique (issue #19) : un essai de 5 h enregistré en 3 fichiers nanodac (10 s).
+    Partie 2 reprend les 5 dernières minutes de la partie 1 (lignes identiques : doublons) ;
+    trou de 30 min avant la partie 3 (enregistreur arrêté)."""
+    r = np.random.default_rng(19)  # générateur à part : les autres exemples ne changent pas
+    t = np.arange(0, 5 * 3600, 10.0)
+    h = t / 3600.0
+    temp = 25 + 30 * np.interp(h, [0, 1, 3.5, 4.5, 5], [0, 1, 1, 0, 0]) + r.normal(0, 0.05, len(t))
+    hum = 50 + 40 * np.interp(h, [0, 1, 3.5, 4.5, 5], [0, 1, 1, 0, 0]) + r.normal(0, 0.3, len(t))
+    stamps = CLIM_START + pd.to_timedelta(t, unit="s")
+    heads = ["Channel 1       (ENAN1);Group 1;M401-T120;°C", "Channel 2       (ENAN2);Group 1;M402-H120;%HR"]
+    rows = [ts.strftime("%d/%m/%y %H:%M:%S") + "\t{:.2f}\t{:.1f}".format(temp[k], hum[k]).replace(".", ",")
+            for k, ts in enumerate(stamps)]
+    folder = OUT / "fusion"
+    folder.mkdir(exist_ok=True)
+    parts = {"enregistrement_1.txt": (0, 2 * 3600), "enregistrement_2.txt": (2 * 3600 - 300, 4 * 3600),
+             "enregistrement_3.txt": (4.5 * 3600, 5 * 3600)}
+    for name, (a, b) in parts.items():
+        chosen = [row for row, x in zip(rows, t) if a <= x < b]
+        (folder / name).write_bytes(("\r\n".join(["Date/Heure\t" + "\t".join(heads)] + chosen) + "\r\n")
+                                    .encode("cp1252"))
+
+
 def gbd():
     """GL860 .GBD (en-tête Shift-JIS de 8192 octets + enregistrements big-endian) et son export CSV."""
     r = np.random.default_rng(1617)
@@ -360,5 +383,6 @@ if __name__ == "__main__":
     gl860()
     climatic()
     pressure()
+    merge_parts()
     gbd()
     print("Fichiers d'exemple générés dans", OUT)

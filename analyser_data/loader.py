@@ -386,54 +386,14 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
     size_mb = path.stat().st_size / 1e6
     progress(_("Analyse du format de {} ({:.0f} Mo)…").format(path.name, size_mb))
 
-    encoding = _detect_encoding(path)
-    head, tail = _head_tail_lines(path, encoding)
-    if not any(line.strip() for line in head):
-        raise LoadError(_("Le fichier « {} » est vide.").format(path.name))
-
-    sample = [line for line in head[-300:] + tail[-300:] if line.strip()]
-    unwrap = _lines_fully_quoted(sample)
-    if unwrap:
-        head, tail, sample = (_unwrap_quotes(x) for x in (head, tail, sample))
-    # Les dernières lignes du fichier sont toujours des mesures : sur un enregistrement court,
-    # le préambule (30 lignes « AMP settings » d'un GL860) peut être plus long que les données
-    # et fausser la détection (issues #8, #9).
-    sep, last = _trailing_data_block([line for line in tail if line.strip()][-300:],
-                                     (forced_sep,) if forced_sep else SEPARATORS)
-    if sep is None:
-        if forced_sep:
-            sep, last = forced_sep, sample[-50:]
-        else:
-            try:
-                sep = _detect_separator(sample, path.name, head)
-            except LoadError:
-                if _looks_space_separated(sample):  # dernier recours : colonnes alignées par des espaces
-                    return _load_via_csv(path, name, progress, _space_rows(path), "")
-                raise
-            last = sample[-50:]
-    merge_commas = sep == "," and _needs_comma_merge(list(csv.reader(sample, delimiter=sep)))
-    if merge_commas:
-        head, tail, sample, last = (_merge_decimal_commas(x) for x in (head, tail, sample, last))
-    head_rows = list(csv.reader(head, delimiter=sep))
-    sample_rows = list(csv.reader(sample, delimiter=sep))
-    n_cols = _modal_field_count(list(csv.reader(last, delimiter=sep)))
-    decimal = "," if merge_commas else _detect_decimal(sample_rows, sep, n_cols)
-    # Colonnes qui contiennent des valeurs dans les vraies lignes de mesure (fin du fichier)
-    signature = _value_signature(sample_rows[-50:], n_cols)
-
-    first_data = _find_first_data_row(head_rows, n_cols, signature)
-    if first_data is None:
-        raise LoadError(
-            _("Le fichier « {} » ne contient pas de données numériques exploitables "
-            "(aucune ligne de mesure reconnue).\n\n{}").format(
-                path.name, _diagnostic(head, sep, n_cols, encoding))
-        )
-    headers, units, aliases = _find_headers(head_rows, first_data, n_cols)
-    signal_names = _graphtec_amp_settings(head_rows[:first_data])
-    source = _guess_source(path.name, head[:first_data])
+    layout = analyze_text(path, forced_sep)
+    if layout is None:  # dernier recours : colonnes alignées par des espaces
+        return _load_via_csv(path, name, progress, _space_rows(path), "")
+    encoding, head, sep, decimal = layout.encoding, layout.head, layout.sep, layout.decimal
+    head_rows, first_data, headers = layout.head_rows, layout.first_data, layout.headers
+    units, aliases, unwrap, merge_commas = layout.units, layout.aliases, layout.unwrap, layout.merge_commas
+    signal_names, source = layout.signal_names, layout.source
     default_unit = DEFAULT_CHANNEL_UNIT if source == "Graphtec" else ""
-    for col, (_alias, unit) in signal_names.items():
-        units.setdefault(col, unit)
 
     progress(_("Lecture des mesures de {} ({:.0f} Mo)…").format(path.name, size_mb))
     raw = _read_table(path, encoding, sep, decimal, first_data, headers, unwrap, merge_commas)
@@ -568,6 +528,79 @@ def _load(path: Path, name: str, progress: Callable[[str], None], forced_sep: Op
         warnings=msgs,
         time_unit=time_unit if unit_forced else "",
     )
+
+
+@dataclass
+class TextLayout:
+    """Structure d'un fichier texte de mesures : encodage, séparateur, décimale, en-tête."""
+    encoding: str
+    head: List[str]
+    sep: str
+    decimal: str
+    n_cols: int
+    head_rows: List[List[str]]
+    first_data: int  # numéro (à partir de 0) de la première ligne de mesure
+    headers: List[str]
+    units: dict
+    aliases: dict
+    unwrap: bool
+    merge_commas: bool
+    signal_names: dict
+    source: str
+
+
+def analyze_text(path: Path, forced_sep: Optional[str] = None) -> Optional[TextLayout]:
+    """Détecte la structure d'un fichier texte (sans lire toutes les mesures). None : colonnes
+    alignées par des espaces (lues autrement)."""
+    encoding = _detect_encoding(path)
+    head, tail = _head_tail_lines(path, encoding)
+    if not any(line.strip() for line in head):
+        raise LoadError(_("Le fichier « {} » est vide.").format(path.name))
+
+    sample = [line for line in head[-300:] + tail[-300:] if line.strip()]
+    unwrap = _lines_fully_quoted(sample)
+    if unwrap:
+        head, tail, sample = (_unwrap_quotes(x) for x in (head, tail, sample))
+    # Les dernières lignes du fichier sont toujours des mesures : sur un enregistrement court,
+    # le préambule (30 lignes « AMP settings » d'un GL860) peut être plus long que les données
+    # et fausser la détection (issues #8, #9).
+    sep, last = _trailing_data_block([line for line in tail if line.strip()][-300:],
+                                     (forced_sep,) if forced_sep else SEPARATORS)
+    if sep is None:
+        if forced_sep:
+            sep, last = forced_sep, sample[-50:]
+        else:
+            try:
+                sep = _detect_separator(sample, path.name, head)
+            except LoadError:
+                if _looks_space_separated(sample):
+                    return None
+                raise
+            last = sample[-50:]
+    merge_commas = sep == "," and _needs_comma_merge(list(csv.reader(sample, delimiter=sep)))
+    if merge_commas:
+        head, tail, sample, last = (_merge_decimal_commas(x) for x in (head, tail, sample, last))
+    head_rows = list(csv.reader(head, delimiter=sep))
+    sample_rows = list(csv.reader(sample, delimiter=sep))
+    n_cols = _modal_field_count(list(csv.reader(last, delimiter=sep)))
+    decimal = "," if merge_commas else _detect_decimal(sample_rows, sep, n_cols)
+    # Colonnes qui contiennent des valeurs dans les vraies lignes de mesure (fin du fichier)
+    signature = _value_signature(sample_rows[-50:], n_cols)
+
+    first_data = _find_first_data_row(head_rows, n_cols, signature)
+    if first_data is None:
+        raise LoadError(
+            _("Le fichier « {} » ne contient pas de données numériques exploitables "
+            "(aucune ligne de mesure reconnue).\n\n{}").format(
+                path.name, _diagnostic(head, sep, n_cols, encoding))
+        )
+    headers, units, aliases = _find_headers(head_rows, first_data, n_cols)
+    signal_names = _graphtec_amp_settings(head_rows[:first_data])
+    source = _guess_source(path.name, head[:first_data])
+    for col, (_alias, unit) in signal_names.items():
+        units.setdefault(col, unit)
+    return TextLayout(encoding, head, sep, decimal, n_cols, head_rows, first_data, headers, units, aliases,
+                      unwrap, merge_commas, signal_names, source)
 
 
 def _detect_encoding(path: Path) -> str:

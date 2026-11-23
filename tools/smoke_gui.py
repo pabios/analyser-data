@@ -593,6 +593,32 @@ def main():
     print("pression + température : OK")
     print("enceinte Excel + moyennes °C / %HR : OK")
 
+    # Issue #19 : fusion chronologique de 3 fichiers choisis dans le désordre
+    parts = ROOT / "exemples" / "fusion"
+    gui.session.clear()
+    gui._checked.clear()
+    dialogs.clear()
+    merged = OUT / "fusion_exemple.txt"
+    gui.merge_files([str(parts / "enregistrement_3.txt"), str(parts / "enregistrement_1.txt"),
+                     str(parts / "enregistrement_2.txt")], str(merged))
+    wait_idle(root, gui)
+    wait_idle(root, gui)  # ouverture du fichier fusionné
+    infos = [d for d in dialogs if d[0] == "info" and d[1] == "Fusion terminée"]
+    assert infos and "1 620 lignes" in infos[0][2] and "Trou de 0:30:10" in infos[0][2], dialogs
+    assert list(gui.session.measurements) == ["fusion_exemple.txt"], list(gui.session.measurements)
+    fm = gui.session.measurements["fusion_exemple.txt"]
+    assert len(fm.data) == 1620 and fm.period_s == 10.0
+    assert any("Fusion chronologique de 3 fichiers" in text for _t, text in gui.session.journal)
+    shot(root, "43_fusion.png")
+    dialogs.clear()
+    bad = OUT / "fusion_impossible.txt"
+    gui.merge_files([str(parts / "enregistrement_1.txt"), str(press_file)], str(bad))
+    wait_idle(root, gui)
+    errors = [d for d in dialogs if d[0] == "error"]
+    assert errors and errors[0][1] == "Fusion impossible" and "nanodac_T_P.txt" in errors[0][2], dialogs
+    assert not bad.exists()
+    print("fusion chronologique : OK")
+
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
     shot_window(help_window, "12_aide.png")
     help_window.destroy()

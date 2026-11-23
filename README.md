@@ -109,6 +109,21 @@ Réglage **Base de temps** :
 
 **Langue** : français ou anglais, au choix dans la liste « FR / EN » en haut à droite (mémorisé).
 
+### Fusionner plusieurs fichiers CSV
+
+**Fusionner…** (en haut) : un essai enregistré en plusieurs fichiers devient **un
+seul CSV trié par date-heure**, quel que soit l'ordre ou le nom des fichiers, puis il est ouvert
+comme un seul essai.
+
+- Fichiers **compatibles** seulement : mêmes titres de colonnes, même séparateur, même décimale,
+  même format de date. Sinon la fusion est **bloquée** et le message nomme le fichier en cause.
+- Lignes de mesure **recopiées telles quelles** ; en haut, l'en-tête du fichier le plus ancien et
+  une seule ligne de titres ; encodage et fins de ligne d'origine.
+- Ligne **identique** dans deux fichiers : gardée une fois. **Même date-heure, valeurs
+  différentes** : les deux gardées, avec un avertissement.
+- **Trous** entre fichiers et **changement d'heure** : signalés, rien n'est corrigé.
+- Exemple : `exemples/fusion/` (3 fichiers nanodac, un recouvrement de 5 min, un trou de 30 min).
+
 ## Formats reconnus
 
 Prévu pour les enregistreurs **Graphtec GL980 / GL860** (export CSV avec bloc

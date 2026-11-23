@@ -336,6 +336,38 @@ report, and are recorded in the log. The original measurements are never changed
 0 to get them back. Values are remembered between launches (per probe: by file and
 channel name)."""),
 
+    ("Fusion", "Fusionner des fichiers", """\
+« Fusionner… » (en haut) : un essai enregistré en plusieurs fichiers CSV devient
+un seul fichier, trié par date-heure, puis ouvert comme un seul essai continu.
+• Choisissez les fichiers dans n'importe quel ordre, puis le nom du fichier fusionné.
+• Les fichiers doivent avoir les mêmes titres de colonnes, le même séparateur, la même
+  décimale et le même format de date. Sinon rien n'est écrit et le message nomme le
+  fichier en cause. La colonne temps doit donner une date-heure (pas seulement un temps
+  écoulé).
+• Les lignes de mesure sont recopiées telles quelles. En haut : l'en-tête du fichier le
+  plus ancien et une seule ligne de titres. Encodage et fins de ligne d'origine.
+• Ligne identique dans deux fichiers (même date-heure, mêmes valeurs) : gardée une fois.
+  Même date-heure avec des valeurs différentes : les deux lignes sont gardées, avec un
+  avertissement.
+• Trous entre fichiers et changement d'heure : signalés, rien n'est corrigé ni ajouté.
+Tout est noté dans le journal. Exemple : exemples/fusion (3 fichiers, un doublon de
+5 min, un trou de 30 min).""",
+     "Merge", """\
+“Merge…” (at the top): a test recorded in several CSV files becomes a single file,
+sorted by date and time, then opened as one continuous test.
+• Choose the files in any order, then the name of the merged file.
+• The files must have the same column titles, separator, decimal mark and date
+  format. Otherwise nothing is written and the message names the file at fault. The
+  time column must give a date-time (not only an elapsed time).
+• Measurement rows are copied as they are. At the top: the header of the oldest file
+  and a single title row. Original encoding and line endings.
+• Row identical in two files (same date-time, same values): kept once. Same date-time
+  with different values: both rows are kept, with a warning.
+• Gaps between files and daylight saving changes: reported, nothing is corrected or
+  added.
+Everything is recorded in the log. Example: exemples/fusion (3 files, a 5 min
+duplicate, a 30 min gap)."""),
+
     ("Livrables pour le client", "Livrables pour le client", """\
 Menu « Exporter » :
 • Données nettoyées (CSV + journal) : le CSV « ; » des voies cochées, et à côté un fichier

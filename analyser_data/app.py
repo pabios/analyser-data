@@ -38,6 +38,7 @@ from .fft_dialog import FftDialog
 from .corrections_dialog import ProbeCorrectionsDialog, ShiftedChannelsDialog
 from .cycles_dialog import CyclesDialog
 from .loader import write_anonymized_extract, write_extract
+from .merge import MergeError, merge_files, merge_summary
 from .report import build_report, save_figure_image
 from .session import is_clim_file, journal_path, legend_label
 from .plotting import PlotManager, PlotSettings, format_hms
@@ -170,6 +171,9 @@ class AnalyserDataApp:
         ttk.Button(actions, text=_("Journal"), style="Ghost.TButton",
                    command=self.show_journal).pack(side=tk.LEFT, padx=(0, 6))
         button = ttk.Button(actions, text=_("Réinitialiser"), command=self.reset_all)
+        button.pack(side=tk.LEFT, padx=(0, 6))
+        self._action_buttons.append(button)
+        button = ttk.Button(actions, text=_("Fusionner…"), command=self.merge_files)
         button.pack(side=tk.LEFT, padx=(0, 6))
         self._action_buttons.append(button)
         self.export_button = ttk.Menubutton(actions, text=_("Exporter  ▾"), style="TMenubutton")
@@ -444,6 +448,55 @@ class AnalyserDataApp:
                                        parent=self.root)
         for path, message in errors:
             self._report_unreadable(path, message)
+
+    def merge_files(self, paths: List[str] = None, target: str = None) -> None:
+        """Issue #19 : plusieurs CSV fusionnés en un seul fichier trié par date-heure, puis ouvert
+        comme un seul essai. ``paths`` / ``target`` : pour les scripts (sans boîte de dialogue)."""
+        if self.busy:
+            return
+        if paths is None:
+            paths = filedialog.askopenfilenames(
+                parent=self.root, title=_("Fichiers à fusionner (dans n'importe quel ordre)"),
+                initialdir=self._last_dir, filetypes=[(_(d), p) for d, p in FILE_TYPES if "Excel" not in d])
+        if not paths:
+            return
+        if len(paths) < 2:
+            messagebox.showinfo(_("Fusion"), _("Choisissez au moins deux fichiers à fusionner."), parent=self.root)
+            return
+        first = Path(paths[0])
+        self._last_dir = str(first.parent)
+        if target is None:
+            suffix = first.suffix or ".csv"
+            target = filedialog.asksaveasfilename(
+                parent=self.root, title=_("Enregistrer le fichier fusionné"), initialdir=str(first.parent),
+                initialfile=_("{}_fusion{}").format(first.stem, suffix), defaultextension=suffix,
+                filetypes=[(_("Texte (CSV, TXT, DAT)"), "*.csv *.txt *.dat *.CSV *.TXT *.DAT")])
+        if not target:
+            return
+
+        def work(progress):
+            try:
+                return merge_files(paths, target, progress)
+            except MergeError as exc:  # fichier incompatible : message clair, pas de rapport d'erreur
+                return exc
+
+        self.run_in_background(_("Fusion de {} fichiers…").format(len(paths)), work, self._on_merged,
+                               error_title=_("Fusion"))
+
+    def _on_merged(self, result) -> None:
+        if isinstance(result, MergeError):
+            messagebox.showerror(_("Fusion impossible"), str(result) + _("\n\nAucun fichier n'a été écrit."),
+                                 parent=self.root)
+            return
+        self.session.log(merge_summary(result))
+        for note in result.notes:
+            self.session.log(_("Fusion : {}").format(note))
+        text = merge_summary(result)
+        if result.notes:
+            text += "\n\n" + "\n".join("• " + n for n in result.notes)
+        messagebox.showinfo(_("Fusion terminée"), text + _("\n\nLe fichier fusionné va être ouvert."),
+                            parent=self.root)
+        self.open_files([str(result.path)], preview=False)
 
     def _report_unreadable(self, path: Path, message: str) -> None:
         """Fichier refusé : explication + extrait à envoyer pour adapter le logiciel."""
