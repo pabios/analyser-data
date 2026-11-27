@@ -52,6 +52,9 @@ python main.py
    ajoutée comme une voie de plus (« Moyenne Channel 4 / Channel 5 (A) ») ; voie calculée,
    les mesures d'origine ne changent pas. Elle suit le décalage « Enceinte climatique » de ses
    voies (moyenne des courbes telles qu'affichées).
+   Bouton **Unités…** : exprimer une voie dans une autre unité de la même grandeur (**A ↔ mA**,
+   V ↔ mV, mbar ↔ bar, kPa, psi…, W, Ω) : valeurs converties, axes, légende, exports et rapport
+   suivent (« I (A) » devient « I (mA) ») ; noté dans le journal, reconvertir rend les valeurs d'origine.
    Bouton **FFT…** : spectre d'amplitude des voies cochées (zone affichée ou tout l'essai),
    pic principal, export CSV et image. Les voies d'un fichier d'enceinte climatique
    gardent leur vrai nom dans la légende (« Channel 2 – M402-M210 (°C) »).

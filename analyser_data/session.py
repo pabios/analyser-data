@@ -5,6 +5,8 @@ Cette classe ne dépend pas de Tkinter : toute la logique métier est testable s
 from __future__ import annotations
 
 import math
+import re
+from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal
 from collections import OrderedDict
 from pathlib import Path
@@ -20,7 +22,7 @@ from .cleaning import (
 from .editing import interpolate_at
 from .export import Key, merge_selection, write_csv
 from .loader import TIME_COL, TIME_UNIT_NAMES, LoadError, Measurement, align_time_axes, load_measurement
-from .channels import HUMIDITY, OTHER, TEMPERATURE, Channel
+from .channels import HUMIDITY, OTHER, TEMPERATURE, Channel, compatible_units, conversion_factor, normalize_unit
 from .cycles import Cycle, Edit, assemble, assemble_time, detect_cycles, fundamental, plan, spectral_f0, synthetic_mask
 from .plotting import PlotSeries, format_hms
 from .i18n import _, get_language
@@ -341,6 +343,56 @@ class Session:
         self.log(_("Correction au clic : {} [{}] point n°{} ({}) : {:.6g} -> {:.6g}").format(
             label, name, index + 1, when, old, value))
         return value
+
+    def convert_unit(self, key: Key, unit: str) -> Key:
+        """Issue #20 : exprime la voie dans une autre unité de la même grandeur (A -> mA, mbar -> bar…).
+        Valeurs actuelles *et* brutes converties (« Annuler le nettoyage » reste cohérent), ainsi que
+        les réglages en unité de la voie (seuil de bruit, décalage de zéro) et l'historique des cycles.
+        Journalisé ; reconvertir dans l'autre sens revient aux valeurs d'origine.
+
+        Une voie dont le nom porte son unité (« I (A) ») est renommée (« I (mA) ») : sinon la légende et
+        l'export afficheraient l'ancienne unité. Renvoie la clé de la voie (nouvelle si renommée)."""
+        name, label = key
+        if key in self.averages:
+            raise ValueError(_("« {} » est une moyenne : convertissez plutôt les voies dont elle fait la moyenne, "
+                               "puis recréez-la.").format(label))
+        used = [k[1] for k, parts in self.averages.items() if key in parts]
+        if used:
+            raise ValueError(_("« {} » fait partie de « {} » : retirez d'abord cette moyenne (ses voies doivent "
+                               "garder la même unité).").format(label, used[0]))
+        m = self.measurements[name]
+        ch = m.channel(label)
+        if unit == ch.unit:
+            return key
+        if unit not in compatible_units(ch.unit):
+            raise ValueError(_("Impossible de convertir {} en {}.").format(ch.unit or _("sans unité"), unit))
+        factor = conversion_factor(ch.unit, unit)
+        m.data[label] = m.data[label].to_numpy(dtype=float) * factor
+        self._raw[name][label] = self._raw[name][label].to_numpy(dtype=float) * factor
+        for data, raw, _elapsed, _mask in self._cycle_undo.get(name, []):
+            data[label] = data[label].to_numpy(dtype=float) * factor
+            raw[label] = raw[label].to_numpy(dtype=float) * factor
+        for settings in (self.noise_thresholds, self.offsets):
+            if settings.get(key) is not None:
+                settings[key] = settings[key] * factor
+        new_label = _label_with_unit(label, ch.unit, unit)
+        if new_label != label and new_label in m.data.columns:
+            new_label = label  # nom déjà pris : on garde l'ancien plutôt que d'écraser une voie
+        m.channels = [replace(c, unit=unit, label=new_label) if c.label == label else c for c in m.channels]
+        new_key = (name, new_label)
+        if new_label != label:
+            m.data = m.data.rename(columns={label: new_label})
+            self._raw[name] = self._raw[name].rename(columns={label: new_label})
+            self._cycle_undo[name] = [(d.rename(columns={label: new_label}), r.rename(columns={label: new_label}),
+                                       e, k) for d, r, e, k in self._cycle_undo.get(name, [])]
+            for settings in (self.noise_thresholds, self.offsets, self.channel_offsets):
+                if key in settings:
+                    settings[new_key] = settings.pop(key)
+            if self.shifted_keys is not None and key in self.shifted_keys:
+                self.shifted_keys = (set(self.shifted_keys) - {key}) | {new_key}
+        self.log(_("Unité convertie : {} [{}] : {} -> {} (valeurs × {:g}).").format(
+            label if new_label == label else "{} -> {}".format(label, new_label), name, ch.unit, unit, factor))
+        return new_key
 
     def make_absolute(self, keys: Sequence[Key], view: Optional[Tuple[float, float]] = None) -> Dict[Key, int]:
         """Retour client (#19) : points négatifs des voies rendus positifs (valeur absolue |x|), sur la
@@ -899,6 +951,14 @@ def legend_label(ch: Channel, temperature_number: int = 0, real_name: bool = Fal
     if ch.unit and ch.label.startswith("Channel "):
         return "{} ({})".format(ch.label, ch.unit)
     return ch.label
+
+
+def _label_with_unit(label: str, old: str, new: str) -> str:
+    """« I (A) » -> « I (mA) », « CH1 [V] » -> « CH1 [mV] » ; nom sans unité : inchangé."""
+    match = re.search(r"([\(\[])\s*([^\)\]]*?)\s*([\)\]])\s*$", label)
+    if match and normalize_unit(match.group(2)) == old:
+        return label[:match.start()] + match.group(1) + new + match.group(3)
+    return label
 
 
 def journal_path(path) -> Path:

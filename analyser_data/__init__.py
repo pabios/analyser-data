@@ -4,4 +4,4 @@
 """
 
 APP_NAME = "Analyser DATA"  # nom affiché partout : fenêtre, en-tête, aide, journal, rapports, images
-__version__ = "0.30.2"
+__version__ = "0.31.0"

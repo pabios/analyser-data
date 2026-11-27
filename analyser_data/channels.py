@@ -19,6 +19,8 @@ _UNIT_RE = re.compile(r"[\(\[]\s*([^\)\]]*?)\s*[\)\]]\s*$")
 _CHANNEL_RE = re.compile(r"^(?:ch|ch\.|channel|voie|cv)\s*[-_ ]?\s*0*(\d+)$", re.IGNORECASE)
 
 _UNIT_ALIASES = {
+    "uv": "µV",
+    "µv": "µV",
     "mv": "mV",
     "v": "V",
     "kv": "kV",
@@ -26,6 +28,7 @@ _UNIT_ALIASES = {
     "ma": "mA",
     "ua": "µA",
     "µa": "µA",
+    "ka": "kA",
     "°c": "°C",
     "ºc": "°C",
     "degc": "°C",
@@ -37,8 +40,14 @@ _UNIT_ALIASES = {
     "rh": "%HR",
     "%": "%",
     "w": "W",
+    "mw": "mW",
+    "kw": "kW",
     "ohm": "Ω",
     "ω": "Ω",
+    "mohm": "mΩ",
+    "mω": "mΩ",
+    "kohm": "kΩ",
+    "kω": "kΩ",
     # pression (issue #18) : écritures des centrales (« MBAR », « Kpa », « psia »…)
     "pa": "Pa",
     "hpa": "hPa",
@@ -68,16 +77,46 @@ PRESSURE = "pression"
 OTHER = "autre"
 
 _QUANTITY_BY_UNIT = {
+    "µV": VOLTAGE,
     "mV": VOLTAGE,
     "V": VOLTAGE,
     "kV": VOLTAGE,
     "mA": CURRENT,
     "A": CURRENT,
     "µA": CURRENT,
+    "kA": CURRENT,
     "°C": TEMPERATURE,
     "%HR": HUMIDITY,
     **{u: PRESSURE for u in ("Pa", "hPa", "kPa", "MPa", "mbar", "bar", "psi", "mmHg", "Torr")},
 }
+
+# Conversions d'unités (issue #20) : facteur vers l'unité de base de chaque famille. Pas de
+# température (°C -> °F n'est pas un simple facteur, et les corrections °C en dépendent).
+UNIT_FAMILIES = (
+    {"µV": 1e-6, "mV": 1e-3, "V": 1.0, "kV": 1e3},
+    {"µA": 1e-6, "mA": 1e-3, "A": 1.0, "kA": 1e3},
+    {"Pa": 1.0, "hPa": 1e2, "kPa": 1e3, "MPa": 1e6, "mbar": 1e2, "bar": 1e5, "psi": 6894.757293168,
+     "mmHg": 133.322387415, "Torr": 101325.0 / 760.0},
+    {"mW": 1e-3, "W": 1.0, "kW": 1e3},
+    {"mΩ": 1e-3, "Ω": 1.0, "kΩ": 1e3},
+)
+
+
+def compatible_units(unit: str) -> list:
+    """Unités vers lesquelles une voie peut être convertie (la sienne comprise), ou [] si aucune."""
+    for family in UNIT_FAMILIES:
+        if unit in family:
+            return list(family)
+    return []
+
+
+def conversion_factor(old: str, new: str) -> float:
+    """Facteur à appliquer aux valeurs en ``old`` pour les exprimer en ``new`` (ex. A -> mA : 1000)."""
+    for family in UNIT_FAMILIES:
+        if old in family and new in family:
+            return family[old] / family[new]
+    raise ValueError("{} -> {}".format(old, new))
+
 
 # Unité par défaut des voies "CHx" sans unité d'un Graphtec (jamais supposée ailleurs :
 # une voie "Channel 2" de nanodac peut très bien être une température)

@@ -40,6 +40,7 @@ from .cycles_dialog import CyclesDialog
 from .loader import write_anonymized_extract, write_extract
 from .merge import MergeError, folder_files, merge_files, merge_headline, merge_summary
 from .message_window import long_choice, long_info
+from .units_dialog import UnitsDialog
 from .report import build_report, save_figure_image
 from .session import format_hms_safe, is_clim_file, journal_path, legend_label
 from .plotting import PlotManager, PlotSettings, format_hms
@@ -216,6 +217,9 @@ class AnalyserDataApp:
                    command=self.open_fft).pack(side=tk.RIGHT)
         ttk.Button(row, text=_("Moyenne…"), style="Small.TButton",
                    command=self.open_averages).pack(side=tk.RIGHT, padx=(0, 6))
+        # Issue #20 : conversion d'unités (A <-> mA…)
+        ttk.Button(row, text=_("Unités…"), style="Small.TButton",
+                   command=self.open_units).pack(side=tk.RIGHT, padx=(0, 6))
         tree_frame = ttk.Frame(box, style="Card.TFrame")
         tree_frame.pack(fill=tk.BOTH, expand=True)
         self.tree = ttk.Treeview(tree_frame, selectmode="none", height=11, show="tree")
@@ -642,6 +646,32 @@ class AnalyserDataApp:
             messagebox.showinfo(_("Moyenne de voies"), _("Ouvrez d'abord des fichiers de mesure."), parent=self.root)
             return
         AveragesDialog(self, [k for k in self.selected_keys() if not self.session.is_average(k)])
+
+    def open_units(self):
+        """Issue #20 : fenêtre « Unités des voies » (A <-> mA, V <-> mV, mbar <-> bar…)."""
+        if self.busy:
+            return None
+        if not self.session.measurements:
+            messagebox.showinfo(_("Unités des voies"), _("Ouvrez d'abord des fichiers de mesure."), parent=self.root)
+            return None
+        return UnitsDialog(self)
+
+    def convert_units(self, changes) -> None:
+        """Convertit chaque voie de ``changes`` {(fichier, voie): unité}. ValueError si impossible
+        (rien n'est converti)."""
+        for key, unit in changes.items():  # vérifier tout avant de convertir quoi que ce soit
+            ch = self.session.measurements[key[0]].channel(key[1])
+            self.session.convert_unit(key, ch.unit)  # même unité : aucun effet, mais lève si interdit
+        for key, unit in changes.items():
+            new_key = self.session.convert_unit(key, unit)
+            if new_key != key:  # voie renommée (« I (A) » -> « I (mA) ») : coche et style suivent
+                if key in self._checked:
+                    self._checked[new_key] = self._checked.pop(key)
+                if key in self.plot_settings.curves:
+                    self.plot_settings.curves[new_key] = self.plot_settings.curves.pop(key)
+        self._rebuild_tree()
+        self._redraw_with_view(None)  # nouvelles valeurs : limites des axes recalculées
+        self._set_status(_("Unité convertie pour {} voie(s) (noté dans le journal).").format(len(changes)))
 
     def open_fft(self):
         """Spectre FFT des voies cochées, sur la zone affichée (issue #16)."""

@@ -695,6 +695,22 @@ def main():
     assert (y[:300] >= 0).all() and (y[400:] < 0).any()
     assert any("Valeur absolue |x| appliquée" in text for _t, text in gui.session.journal)
     shot(root, "46_valeur_absolue.png")
+
+    # Issue #20 : conversion d'unités (mV -> V sur Channel 2) par la fenêtre « Unités… »
+    units = gui.open_units()
+    pump(root)
+    key = next(k for k in units.vars if k[1] == "Channel 2")
+    before = fm.data["Channel 2"].to_numpy().copy()
+    units.vars[key].set("V")
+    pump(root)
+    shot_window(units, "47_unites.png")
+    units.apply()
+    pump(root)
+    assert fm.channel("Channel 2").unit == "V"
+    assert np.allclose(fm.data["Channel 2"].to_numpy(), before / 1000, equal_nan=True)
+    assert any("Unité convertie" in text and "mV -> V" in text for _t, text in gui.session.journal)
+    shot(root, "48_unite_convertie.png")
+    print("unités : OK")
     print("fusion chronologique : OK")
 
     help_window = app_module.HelpWindow.open(root, "Nettoyage")
